@@ -1,0 +1,3209 @@
+[
+  {
+    "empCode": "85",
+    "name": "Ayya tumb organiser",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "18",
+    "name": "Admin + Card",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "124",
+    "name": "Ayyaraj",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "123",
+    "name": "Nishanth",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1050",
+    "name": "Naveen Kumar",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "10",
+    "name": "Kaushik Rao R",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0132",
+    "name": "Sudheer",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-26T04:56:00.002Z",
+    "monthlyCtc": 30000,
+    "basicSalary": 15000,
+    "hra": 6000,
+    "allowances": 7000,
+    "dob": "2003-06-14",
+    "email": "gmsaisudheer@gmail.com",
+    "phone": "9396444455",
+    "department": "Devloper",
+    "designation": "Full Stack Devloper",
+    "grossSalary": 28000,
+    "totalNetSalary": 26200,
+    "annualCtc": 360000,
+    "fixedSalary": 15000,
+    "specialAllowance": 7000,
+    "employeePf": 1800,
+    "employerPf": 1800,
+    "professionalTax": 200,
+    "bankAccount": "122334343",
+    "ifscCode": "454345435",
+    "employeeEsic": 0,
+    "employerEsic": 0,
+    "minimumBonus": 0,
+    "notes": "MONGO_SYNC_TEST_MARKER"
+  },
+  {
+    "empCode": "0131",
+    "name": "Kajal",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0130",
+    "name": "Rohit",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0129",
+    "name": "Sanisha",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0128",
+    "name": "Hema",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0127",
+    "name": "Krishna Kumar",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0126",
+    "name": "Pavithra G",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0125",
+    "name": "Mavani Krupali Jitendrabhai",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0122",
+    "name": "Akashy",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0121",
+    "name": "Anil",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0118",
+    "name": "Priyadharshini Manoharan",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0117",
+    "name": "Kavadi Swathi",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0116",
+    "name": "Praveen A",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0114",
+    "name": "Sushree Sriyanka Rout",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0113",
+    "name": "Vijaya",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0112",
+    "name": "Aarthi",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0110",
+    "name": "Ummadi Srikant",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0088",
+    "name": "Sai Krishna",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0082",
+    "name": "Vishal",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0076",
+    "name": "Rukshana",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0066",
+    "name": "Rafiq",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0061",
+    "name": "Mohit",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0055",
+    "name": "Anjana",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0047",
+    "name": "Asha N",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0026",
+    "name": "Akhila.A",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0023",
+    "name": "Balachander K",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4102",
+    "name": "Laxmi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4101",
+    "name": "Sumithrabai",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4100",
+    "name": "Rani Devi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4099",
+    "name": "Anil Pandey",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4098",
+    "name": "Roshani Sardar",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4097",
+    "name": "Dipankar Sardar",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4096",
+    "name": "Ramadevi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4095",
+    "name": "S Lakshmi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4094",
+    "name": "Sutapa",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4093",
+    "name": "Madire Rohini",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4092",
+    "name": "Gunturi Darthi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4090",
+    "name": "Ayesha",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4089",
+    "name": "S Alisha",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4088",
+    "name": "Naralaeswaramma",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4087",
+    "name": "Rekha Kumari",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4086",
+    "name": "Muttamma Moulappa Bhutal",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4085",
+    "name": "Pusa Devi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4084",
+    "name": "Nayomi Lakra",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4083",
+    "name": "Sangeetha Sharma",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4082",
+    "name": "Jyothi Sidramappa Doddamani",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4081",
+    "name": "Rukmeeni",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4080",
+    "name": "Vidyawati Devi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4079",
+    "name": "Devamma",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4078",
+    "name": "Pramila",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4077",
+    "name": "Kavitha Sharanabasappa Mali",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4076",
+    "name": "Parvati Chidananda Helavara",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4074",
+    "name": "Krishna Devi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4073",
+    "name": "Sanjna",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4072",
+    "name": "E Sukanya",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4071",
+    "name": "Lavanya",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4069",
+    "name": "Nirmala Kedari Gadakari",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4068",
+    "name": "Bhagya",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4065",
+    "name": "A Jyothi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4064",
+    "name": "Anamika",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4063",
+    "name": "Savitri Basavaraj Kadakol",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4062",
+    "name": "Manjula N",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4061",
+    "name": "Deepika Raul",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4060",
+    "name": "Vanathi C",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4059",
+    "name": "Mina Koya",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4058",
+    "name": "G Shanthi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4056",
+    "name": "Akkatayi Satyagouda Managutti",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4051",
+    "name": "Choudaka Lokesh Kumar",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4050",
+    "name": "Rinasingh",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4049",
+    "name": "S Durga",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4047",
+    "name": "Roopa",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4046",
+    "name": "Tamilarasi G",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4043",
+    "name": "Paandella Bhavani",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4042",
+    "name": "Anjali Devi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4034",
+    "name": "Usha Patrot",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4033",
+    "name": "Shilpa Ganapati Gerade",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4031",
+    "name": "Kasturi Ashok Hullur",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4027",
+    "name": "Mananda Shrimant Hanjagi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4024",
+    "name": "Punitha L",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4023",
+    "name": "Sangamma Shivappa Boragi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4022",
+    "name": "Subhashini G",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4021",
+    "name": "Anusha A",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4017",
+    "name": "Munilashmi V",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4015",
+    "name": "Gangamma",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4014",
+    "name": "Jyothi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4013",
+    "name": "Shilpa RL",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4010",
+    "name": "Pavithra N",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4009",
+    "name": "N Vijaya Nirmala",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4007",
+    "name": "Varalakshmi N",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4005",
+    "name": "Nagaveni",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4108",
+    "name": "Khajayya",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4107",
+    "name": "Kalamma",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4106",
+    "name": "Rabina Kujur",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4105",
+    "name": "Jayashri Savant Kanthi",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4104",
+    "name": "Manimegalai Mahendiran",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4103",
+    "name": "Rukmani",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1260",
+    "name": "Mari Debbarma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1186",
+    "name": "Dharmendra",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1164",
+    "name": "Savita",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1099",
+    "name": "Prabha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0989",
+    "name": "Mohamad Akhatar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0842",
+    "name": "Balu Vasantha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0830",
+    "name": "Md Sahim",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0487",
+    "name": "Pushpa A",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0410",
+    "name": "MD Bhola",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "0071",
+    "name": "Ajmat Ali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "490",
+    "name": "Geeta WN",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "349",
+    "name": "Tharakumari BM",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "345",
+    "name": "Mangala B",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "344",
+    "name": "S Mery",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "340",
+    "name": "Anitha KC",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "337",
+    "name": "Kamil Hussain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "332",
+    "name": "Madhusmita nayak",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "304",
+    "name": "Karthik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "4001",
+    "name": "Triveni D",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "299",
+    "name": "Thulasi M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "287",
+    "name": "Vikau Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "283",
+    "name": "Musfik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "271",
+    "name": "Leelavati",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "266",
+    "name": "Jamil Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "260",
+    "name": "Krishnamurthy",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "248",
+    "name": "Anitha Singh",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "239",
+    "name": "Sudha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "222",
+    "name": "Venkatesh R.N",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "198",
+    "name": "Aash Mohammad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "191",
+    "name": "Muzair Ahmed",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "189",
+    "name": "Mahendra Kumar Sahoo",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "178",
+    "name": "Sumit",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "168",
+    "name": "Zunad Ahamad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "153",
+    "name": "Murtaja Anasari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1372",
+    "name": "Empname1372",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1371",
+    "name": "Empname1371",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1369",
+    "name": "Khyati Tivari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1368",
+    "name": "Akash Prasad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1367",
+    "name": "Shwetha S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1366",
+    "name": "Avula Jayasree",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1365",
+    "name": "Biswajit Fulmali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1364",
+    "name": "Ponnaganti Venkata Lakshmi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1363",
+    "name": "Prashant Gouda",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1362",
+    "name": "Gangavati Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1361",
+    "name": "Anita Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1360",
+    "name": "Chandani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1359",
+    "name": "Ajmati Khatoon",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1357",
+    "name": "Shama Sulthana",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1356",
+    "name": "Kallesh Kumar HM",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1355",
+    "name": "Jitu Jani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1354",
+    "name": "Lingaraj Jani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1353",
+    "name": "Gowtham S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1352",
+    "name": "Chappidi Subbamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1351",
+    "name": "Mohammad Rehan Raja",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1350",
+    "name": "Arun Das",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1349",
+    "name": "Ganesh Das",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1348",
+    "name": "Sibani Sabar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1347",
+    "name": "Thakur Mardi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1346",
+    "name": "Md Azad Sah",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1345",
+    "name": "Pawan Bahadur Bohara",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1344",
+    "name": "Ancy Joelin A",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1343",
+    "name": "Renuka Ningappa Mangyal",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1342",
+    "name": "Munirajamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1341",
+    "name": "Moulisvaran N",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1340",
+    "name": "Bandi Uma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1339",
+    "name": "V Lokesh",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1338",
+    "name": "Pujaranee Nayak",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1337",
+    "name": "Supriya Naik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1336",
+    "name": "Chandan Gouda",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1335",
+    "name": "Bhairab Gogoi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1334",
+    "name": "Bishal Guwala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1333",
+    "name": "Jibit Giri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1332",
+    "name": "Y Bharathi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1331",
+    "name": "Marpu Priya Sarika",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1330",
+    "name": "Raj Kumar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1329",
+    "name": "Kavitha N",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1328",
+    "name": "Teppala Ajeema",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1327",
+    "name": "Yerragunta Nanda Kishore",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1326",
+    "name": "Budin Kisku",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1325",
+    "name": "Mohd Ashif",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1324",
+    "name": "Mamatha S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1323",
+    "name": "Manakhi Murmu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1322",
+    "name": "Samreen Begum",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1321",
+    "name": "Arshiya Taj",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1320",
+    "name": "Aditya Malik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1319",
+    "name": "Surjya Nahak",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1318",
+    "name": "Anitha Dash",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1317",
+    "name": "Subhashini PM",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1316",
+    "name": "S Sarala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1315",
+    "name": "Manjula",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1314",
+    "name": "Anver Arshad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1313",
+    "name": "Varalakshmi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1312",
+    "name": "Nethravati",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1311",
+    "name": "Basu Dev",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1310",
+    "name": "Manjula",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1309",
+    "name": "Sneha K",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1308",
+    "name": "Shrishty Sinha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1307",
+    "name": "M Manasa",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1306",
+    "name": "Susmita Rani Goala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1305",
+    "name": "S Salim Basha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1304",
+    "name": "S Shaziya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1303",
+    "name": "Md Sanaullah Ali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1302",
+    "name": "Sandhya V",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1301",
+    "name": "Ramalakshmi V",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1300",
+    "name": "Maksud Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1299",
+    "name": "Swaruapa HV",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1298",
+    "name": "Praveena C",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1297",
+    "name": "Abdul Hasib Choudhury",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1296",
+    "name": "Roma Thapa",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1295",
+    "name": "Asha Rai",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1294",
+    "name": "Uma Subba",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1292",
+    "name": "Raju Lama",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1291",
+    "name": "Champu Gowala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1290",
+    "name": "Prena Guwala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1289",
+    "name": "Duggu Swarnalatha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1288",
+    "name": "Md Morthuza Ahmed",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1287",
+    "name": "Rabiul Hussain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1285",
+    "name": "Kanhucharan Mandal",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1281",
+    "name": "Sharda Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1280",
+    "name": "Priya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1279",
+    "name": "Shirisha L",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1278",
+    "name": "Bhej Raj Chetri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1277",
+    "name": "Shaik Khalander",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1276",
+    "name": "Bibha Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1274",
+    "name": "Shobha M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1273",
+    "name": "Kamalamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1270",
+    "name": "Thriveni M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1268",
+    "name": "Istak",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1265",
+    "name": "Md Junayed Ahmed",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1264",
+    "name": "K Ashwarya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1263",
+    "name": "Devika K",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1262",
+    "name": "Rathnamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1261",
+    "name": "B Lakrshmidevi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1259",
+    "name": "Taman Joy Tripura",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1258",
+    "name": "Sharfuddin",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1255",
+    "name": "Kiran Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1253",
+    "name": "Chandanam S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1249",
+    "name": "Geeta Basavarj Dadamani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1248",
+    "name": "Basavaraj Dodamani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.886Z"
+  },
+  {
+    "empCode": "1247",
+    "name": "Sanjib Kumar Behera",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1246",
+    "name": "Nirma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1238",
+    "name": "Dibakar Malik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1230",
+    "name": "Venkatalakshmma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1229",
+    "name": "G Karthik No (OT)",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1228",
+    "name": "Lipsa Rani Pradhan",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1227",
+    "name": "Jaibeer",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1224",
+    "name": "Pinki Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1223",
+    "name": "Thiriveedi Reddamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1222",
+    "name": "Radha M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1219",
+    "name": "Bhagaban Das",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1217",
+    "name": "Narajul Alam",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1211",
+    "name": "Naveenkumar V",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1210",
+    "name": "Chaithanya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1207",
+    "name": "Aruna C",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1202",
+    "name": "Kumari Ritu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1201",
+    "name": "Jagadeesah",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1198",
+    "name": "Anu Karmakar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1194",
+    "name": "Rakesh Kumar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1181",
+    "name": "Vishnupriya M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1180",
+    "name": "Sulthanabegum",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1175",
+    "name": "Radha Pendyala",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1174",
+    "name": "Mangala V",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1172",
+    "name": "Bhum Bahadur Limbu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1167",
+    "name": "Pintu Fulmali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1166",
+    "name": "Santi Mura",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1162",
+    "name": "Kalpana",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1159",
+    "name": "Fulmani Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1154",
+    "name": "M Shankarvijay",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1151",
+    "name": "Md Aamir Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1148",
+    "name": "Ramecha Begum",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1147",
+    "name": "Md Basarat",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1145",
+    "name": "Gudiya Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1144",
+    "name": "Swarna Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1143",
+    "name": "Rajeev",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1141",
+    "name": "Deepika KG",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1138",
+    "name": "Kiran Kumar TS",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1137",
+    "name": "Md Monajir",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1135",
+    "name": "Katasani Sulochana",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1129",
+    "name": "Kenchamma S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1127",
+    "name": "Jamal Ali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1120",
+    "name": "Bharathi M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1119",
+    "name": "Mohmmad Murtuza",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1118",
+    "name": "Amataj Mansuri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1117",
+    "name": "Puspa Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1112",
+    "name": "Kamakshi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1111",
+    "name": "Narasamma P",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1106",
+    "name": "Binod Damai",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1104",
+    "name": "Kapil Limbu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1103",
+    "name": "Suneel",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1100",
+    "name": "Rima Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1092",
+    "name": "Nithya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1079",
+    "name": "Pavithra G",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1078",
+    "name": "Rashmi D",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1067",
+    "name": "Raju Pradhan",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1062",
+    "name": "Roopa V",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1058",
+    "name": "Soudamini Naik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1056",
+    "name": "Purnabahadur Gurung",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1055",
+    "name": "Anniketh S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1046",
+    "name": "Joseph JR",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1044",
+    "name": "Balu Venkata Narayanamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1043",
+    "name": "Vallem Rattamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1035",
+    "name": "Harini SM",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1031",
+    "name": "Bhavya Devi G",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1023",
+    "name": "Parboti Soren",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1019",
+    "name": "Rama",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1017",
+    "name": "Suma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1016",
+    "name": "Kabita Manadal",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1015",
+    "name": "Manoj K",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1013",
+    "name": "Samser Aalam",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1002",
+    "name": "Bijay Kishan",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1001",
+    "name": "Shruthi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "1000",
+    "name": "Patnam Olakka",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0999",
+    "name": "U Yasodha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0991",
+    "name": "Raju",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0982",
+    "name": "Biju Limbu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0975",
+    "name": "Dipa Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0956",
+    "name": "CR Naveen",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0949",
+    "name": "Majhar Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0948",
+    "name": "Abdul Salam Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0942",
+    "name": "Subhendu Mandal",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0939",
+    "name": "Santi Sunar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0938",
+    "name": "Choudaka Lokesh Kumar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0921",
+    "name": "Shwetha KV",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0920",
+    "name": "K Dhanalakshmi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0918",
+    "name": "Madiga Devid",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0913",
+    "name": "P Mallikarjuna",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0909",
+    "name": "Aarif Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0904",
+    "name": "Sunita Bayen",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0903",
+    "name": "Md Abdul Hussain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0898",
+    "name": "Firoj Mansuri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0896",
+    "name": "Kiran Kumar N",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0888",
+    "name": "Divyateja Gattu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0875",
+    "name": "Moshahid raza",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0873",
+    "name": "Shaziyz banu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0870",
+    "name": "Vinay kumar SK",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0863",
+    "name": "Nanda Gopal MD",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0851",
+    "name": "Kausar ali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0850",
+    "name": "Balu Koteswari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0846",
+    "name": "Ramya",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0803",
+    "name": "Dhanush H.G",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0800",
+    "name": "Dhanalakshmi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0793",
+    "name": "Alka Kumari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0786",
+    "name": "Sangeeta rai",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0785",
+    "name": "Rahul Ahmed",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0721",
+    "name": "A Dharani",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0706",
+    "name": "Yashwanth",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0703",
+    "name": "Krishnamurthy  M",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0702",
+    "name": "Sandhya Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0701",
+    "name": "Mamta sharama",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0697",
+    "name": "Bikash Chandra Giri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0688",
+    "name": "Poornima",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0687",
+    "name": "Ranajit Sahoo",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0668",
+    "name": "Karthik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0661",
+    "name": "Jayamma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0642",
+    "name": "Fahad pasha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0608",
+    "name": "Akshyay karad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0599",
+    "name": "Sanu sundar karad",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0584",
+    "name": "Dilshad begum",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0576",
+    "name": "Shaukat Ali",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0552",
+    "name": "Rubi devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0549",
+    "name": "Imteyaj",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0520",
+    "name": "Santoshini Adabar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0515",
+    "name": "MD Rezabul mirzan",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0514",
+    "name": "Rekha baitha",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0481",
+    "name": "Anika chakma",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0475",
+    "name": "Thorlamarugu Chandana",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0457",
+    "name": "P Lakshmi Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0438",
+    "name": "Imran Rezaul",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0435",
+    "name": "Jabir Hussain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0431",
+    "name": "Jubair (WN)",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0408",
+    "name": "Mohammad Khalid",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0357",
+    "name": "Papun Sahoo",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0346",
+    "name": "Manjunatha C",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0265",
+    "name": "Md Hasnain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "024",
+    "name": "Zakir",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "022",
+    "name": "Musharof",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0206",
+    "name": "Mohammad Shakib Hussain",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0197",
+    "name": "Mumtaj Mansuri",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0161",
+    "name": "Jubair Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0098",
+    "name": "Shobha B",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0096",
+    "name": "Mohammad Rehan",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0091",
+    "name": "Neyaj Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0087",
+    "name": "Mrutunjay Barik",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0081",
+    "name": "Jitender",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0080",
+    "name": "Jayalakshmi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0077",
+    "name": "Gowthami",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0074",
+    "name": "Afroz Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0073",
+    "name": "Ajahar Ansari",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0072",
+    "name": "Anand Kumar",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0046",
+    "name": "Nazeema Banu",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0045",
+    "name": "Kenneti Devi",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0038",
+    "name": "Kumar S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0035",
+    "name": "Narmada S",
+    "location": "budigere",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0069",
+    "name": "Ruksana",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "0062",
+    "name": "Kalyani",
+    "location": "office",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-25T10:15:44.887Z"
+  },
+  {
+    "empCode": "4000",
+    "name": "Kumar S",
+    "location": "bidarahalli",
+    "otEligible": true,
+    "status": "active",
+    "updatedAt": "2026-09-26T03:55:41.793Z"
+  }
+]
