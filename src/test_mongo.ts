@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ENV } from './config/env.js';
 
 const uri = process.env.MONGODB_URI || ENV.MONGODB_URI;
