@@ -31,6 +31,18 @@ export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction)
   next();
 };
 
+export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const decoded = authService.verifyToken(token);
+    if (decoded) {
+      req.user = decoded;
+    }
+  }
+  next();
+};
+
 export const requireRole = (roles: UserRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {

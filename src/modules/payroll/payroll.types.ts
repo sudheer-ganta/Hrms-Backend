@@ -28,18 +28,24 @@ export interface EmployeePayrollSummary {
   basicSalary: number;
   hra: number;
   allowances: number;
+  grossSalary?: number; // Gross Monthly Salary (D) = Basic + HRA + Special Allowance
   otRatePerHour: number;
   otEarnings: number; // Calculated Overtime pay
   grossEarnings: number; // Basic + HRA + Allowances + OT
 
+  // Statutory & Company Contributions (₹)
+  employerPf?: number; // Employer Contribution to PF (H) (e.g. ₹1,800)
+  employerEsic?: number; // Employer Contribution to ESIC (I)
+
   // Deductions Breakdown (₹)
   lopDeduction: number; // Deducted for absent/unpaid days
-  pfDeduction: number; // Provident Fund (if configured)
-  esiDeduction: number; // ESI (if configured)
-  ptDeduction: number; // Professional Tax (if configured)
+  pfDeduction: number; // Employee Provident Fund (E)
+  esiDeduction: number; // Employee ESI (F)
+  ptDeduction: number; // Professional Tax (J)
   totalDeductions: number;
 
   // Final Net Pay (₹)
+  totalNetSalary?: number; // Net Salary before PT (G) = Gross - Employee PF/ESI
   netPayable: number;
   netPayableWords: string;
 

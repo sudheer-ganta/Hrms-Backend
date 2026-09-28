@@ -8,6 +8,7 @@ interface StorageData {
   records: IAttendanceRecord[];
   inOutRecords: IInOutRecord[];
   syncLogs: (ISyncLog & { _id: string })[];
+  adjustments: Record<string, Record<string, { otHours?: number; totalWorkHours?: number; multiplier?: number }>>;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -18,7 +19,7 @@ const ensureDataFile = (): StorageData => {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   if (!fs.existsSync(DATA_FILE)) {
-    const initial: StorageData = { records: [], inOutRecords: [], syncLogs: [] };
+    const initial: StorageData = { records: [], inOutRecords: [], syncLogs: [], adjustments: {} };
     fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2), 'utf-8');
     return initial;
   }
@@ -28,9 +29,10 @@ const ensureDataFile = (): StorageData => {
     if (!parsed.records) parsed.records = [];
     if (!parsed.inOutRecords) parsed.inOutRecords = [];
     if (!parsed.syncLogs) parsed.syncLogs = [];
+    if (!parsed.adjustments) parsed.adjustments = {};
     return parsed;
   } catch {
-    const fallback: StorageData = { records: [], inOutRecords: [], syncLogs: [] };
+    const fallback: StorageData = { records: [], inOutRecords: [], syncLogs: [], adjustments: {} };
     fs.writeFileSync(DATA_FILE, JSON.stringify(fallback, null, 2), 'utf-8');
     return fallback;
   }
@@ -125,5 +127,28 @@ export const localStore = {
 
   getSyncLogs: (): (ISyncLog & { _id: string })[] => {
     return ensureDataFile().syncLogs;
+  },
+
+  getAdjustments: (month: string): Record<string, { otHours?: number; totalWorkHours?: number; multiplier?: number }> => {
+    const data = ensureDataFile();
+    return data.adjustments?.[month] || {};
+  },
+
+  saveAdjustments: (
+    month: string,
+    adjustments: Record<string, { otHours?: number; totalWorkHours?: number; multiplier?: number }>
+  ): void => {
+    const data = ensureDataFile();
+    if (!data.adjustments) data.adjustments = {};
+    data.adjustments[month] = adjustments;
+    saveData(data);
+  },
+
+  clearAdjustments: (month: string): void => {
+    const data = ensureDataFile();
+    if (data.adjustments && data.adjustments[month]) {
+      delete data.adjustments[month];
+      saveData(data);
+    }
   },
 };

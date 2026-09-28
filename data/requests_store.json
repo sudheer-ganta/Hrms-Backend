@@ -1,0 +1,39 @@
+[
+  {
+    "id": "req_1790584890725_wr9e",
+    "empCode": "0132",
+    "empName": "Sudheer",
+    "requestType": "LEAVE",
+    "date": "2026-09-28",
+    "leaveType": "CASUAL_LEAVE",
+    "reason": "hi",
+    "status": "PENDING",
+    "createdAt": "2026-09-28T08:41:30.725Z"
+  },
+  {
+    "id": "req_1790582311365_48jd",
+    "empCode": "0132",
+    "empName": "Sudheer",
+    "requestType": "MISSED_PUNCH",
+    "date": "2026-09-01",
+    "inTime": "09:00",
+    "outTime": "18:24",
+    "reason": "Forgot morning swipe at entrance",
+    "status": "APPROVED",
+    "createdAt": "2026-09-28T07:58:31.365Z",
+    "reviewComment": "Regularized with punch",
+    "reviewedBy": "Super Admin",
+    "reviewedAt": "2026-09-28T07:58:31.368Z"
+  },
+  {
+    "id": "req_1790581657327_fazi",
+    "empCode": "0132",
+    "empName": "Sudheer",
+    "requestType": "LEAVE",
+    "date": "2026-09-09",
+    "leaveType": "CASUAL_LEAVE",
+    "reason": "esrd",
+    "status": "APPROVED",
+    "createdAt": "2026-09-28T07:47:37.327Z"
+  }
+]

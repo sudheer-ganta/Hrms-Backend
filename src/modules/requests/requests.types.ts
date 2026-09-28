@@ -11,6 +11,7 @@ export interface AttendanceRegularizationRequest {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   reviewedAt?: string;
+  reviewedBy?: string;
   reviewComment?: string;
 }
 

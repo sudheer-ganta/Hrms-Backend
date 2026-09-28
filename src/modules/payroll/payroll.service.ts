@@ -10,6 +10,8 @@ import { InOutModel } from '../attendance/inOut.model.js';
 import { AttendanceModel } from '../attendance/attendance.model.js';
 import { HRMSPolicySettings } from '../settings/policy.types.js';
 import { payrollRunService } from './payrollRun.service.js';
+import { payrollAdjustmentService } from './payrollAdjustment.service.js';
+import { EmployeeOtAdjustment } from './payrollAdjustment.types.js';
 
 // Late-arrival cutoff = configured shift start time + grace period, expressed in
 // minutes-since-midnight, so it reflects Settings instead of a hardcoded time.
@@ -52,27 +54,44 @@ class PayrollService {
     const holidays = policy.holidays || [];
     const holidayDates = new Set(holidays.map(h => h.date));
     const weeklyOffList = policy.weeklyOffDays || ['Sunday'];
-    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 8.0);
-    const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 8.0);
-    const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 4.0);
+    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 3.0);
+    const minCheckoutForFullDay = policy.shift?.minCheckoutForFullDay || '16:00';
     const otRateMultiplier = policy.overtime?.defaultRateMultiplier || 1.5;
     const lateThresholdMinutes = getLateThresholdMinutes(policy);
 
-    // Filter in-out records and raw punches — reads from MongoDB when connected
-    // (the source of truth going forward) and only falls back to the local JSON
-    // store when Mongo is unavailable, matching the rest of the app.
+    const dateFrom = format(mStart, 'yyyy-MM-01');
+    const dateTo = format(mEnd, 'yyyy-MM-dd');
+
+    // Filter in-out records and raw punches for this specific month only
     const isDbConnected = mongoose.connection.readyState === 1;
-    const inOutList = isDbConnected
-      ? await InOutModel.find({ employeeCode: empCode }).lean()
-      : localStore.getInOutRecords().filter(r => r.employeeCode === empCode);
+    let inOutList: any[] = [];
+    let punchesList: any[] = [];
+
+    if (isDbConnected) {
+      try {
+        [inOutList, punchesList] = await Promise.all([
+          InOutModel.find({ employeeCode: empCode, date: { $gte: dateFrom, $lte: dateTo } }).maxTimeMS(3000).lean(),
+          AttendanceModel.find({ employeeCode: empCode, entryDate: { $gte: dateFrom, $lte: dateTo } }).select('entryDate punchDateTime employeeCode').maxTimeMS(3000).lean(),
+        ]);
+      } catch (err) {
+        console.warn('MongoDB query in calculateEmployeePayroll failed/timed out, using local store:', err);
+        inOutList = [];
+        punchesList = [];
+      }
+    }
+
+    if (inOutList.length === 0 && punchesList.length === 0) {
+      inOutList = localStore.getInOutRecords().filter(r => r.employeeCode === empCode && r.date >= dateFrom && r.date <= dateTo);
+      punchesList = localStore.getRecords().filter(p => p.employeeCode === empCode && p.entryDate >= dateFrom && p.entryDate <= dateTo);
+    }
+
     const inOutMap = new Map<string, typeof inOutList[0]>();
     for (const r of inOutList) {
       if (r.date) inOutMap.set(r.date, r);
     }
 
-    const punchesList = isDbConnected
-      ? await AttendanceModel.find({ employeeCode: empCode }).lean()
-      : localStore.getRecords().filter(p => p.employeeCode === empCode);
     const punchesMap = new Map<string, typeof punchesList>();
     for (const p of punchesList) {
       const dStr = p.entryDate || (p.punchDateTime ? new Date(p.punchDateTime).toISOString().substring(0, 10) : '');
@@ -81,6 +100,9 @@ class PayrollService {
         punchesMap.get(dStr)!.push(p);
       }
     }
+
+    const adjustments = await payrollAdjustmentService.getAdjustments(targetMonthKey);
+    const empAdj = adjustments[empCode];
 
     return this.computeSingleEmployee(
       profile,
@@ -92,10 +114,12 @@ class PayrollService {
       standardDayHours,
       minFullDayHours,
       minHalfDayHours,
+      minCheckoutForFullDay,
       otRateMultiplier,
       lateThresholdMinutes,
       inOutMap,
-      punchesMap
+      punchesMap,
+      empAdj
     );
   }
 
@@ -112,6 +136,7 @@ class PayrollService {
     }
 
     const allProfiles = await employeeMasterService.getAllProfiles();
+    const adjustments = await payrollAdjustmentService.getAdjustments(targetMonthKey);
     const isDbConnected = mongoose.connection.readyState === 1;
 
     const targetDate = monthStr ? new Date(`${monthStr}-01`) : new Date();
@@ -120,20 +145,44 @@ class PayrollService {
     const formattedMonth = format(mStart, 'yyyy-MM');
     const daysInMonth = eachDayOfInterval({ start: mStart, end: mEnd });
     const totalMonthDays = daysInMonth.length;
+    const dateFrom = format(mStart, 'yyyy-MM-01');
+    const dateTo = format(mEnd, 'yyyy-MM-dd');
 
     // Load policy ONCE
     const policy = policyService.getSettings();
     const holidays = policy.holidays || [];
     const holidayDates = new Set(holidays.map(h => h.date));
     const weeklyOffList = policy.weeklyOffDays || ['Sunday'];
-    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 8.0);
-    const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 8.0);
-    const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 4.0);
+    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 3.0);
+    const minCheckoutForFullDay = policy.shift?.minCheckoutForFullDay || '16:00';
     const otRateMultiplier = policy.overtime?.defaultRateMultiplier || 1.5;
     const lateThresholdMinutes = getLateThresholdMinutes(policy);
 
+    // Fetch ONLY the target month records with projection for extreme speed
+    let allInOut: any[] = [];
+    let allPunches: any[] = [];
+
+    if (isDbConnected) {
+      try {
+        [allInOut, allPunches] = await Promise.all([
+          InOutModel.find({ date: { $gte: dateFrom, $lte: dateTo } }).maxTimeMS(4000).lean(),
+          AttendanceModel.find({ entryDate: { $gte: dateFrom, $lte: dateTo } }).select('employeeCode entryDate punchDateTime').maxTimeMS(4000).lean(),
+        ]);
+      } catch (err) {
+        console.warn('MongoDB query in calculateAllEmployeesPayroll failed/timed out, using local store:', err);
+        allInOut = [];
+        allPunches = [];
+      }
+    }
+
+    if (allInOut.length === 0 && allPunches.length === 0) {
+      allInOut = localStore.getInOutRecords().filter(r => r.date >= dateFrom && r.date <= dateTo);
+      allPunches = localStore.getRecords().filter(p => p.entryDate >= dateFrom && p.entryDate <= dateTo);
+    }
+
     // Pre-index InOut records by [empCode -> [date -> record]]
-    const allInOut = isDbConnected ? await InOutModel.find({}).lean() : localStore.getInOutRecords();
     const inOutIndex = new Map<string, Map<string, typeof allInOut[0]>>();
     for (const r of allInOut) {
       if (r.employeeCode && r.date) {
@@ -145,7 +194,6 @@ class PayrollService {
     }
 
     // Pre-index raw punches by [empCode -> [date -> punchList]]
-    const allPunches = isDbConnected ? await AttendanceModel.find({}).lean() : localStore.getRecords();
     const punchesIndex = new Map<string, Map<string, typeof allPunches>>();
     for (const p of allPunches) {
       if (p.employeeCode) {
@@ -170,6 +218,7 @@ class PayrollService {
     return allProfiles.map((profile) => {
       const empInOutMap = inOutIndex.get(profile.empCode) || emptyInOutMap;
       const empPunchesMap = punchesIndex.get(profile.empCode) || emptyPunchesMap;
+      const empAdj = adjustments[profile.empCode];
 
       return this.computeSingleEmployee(
         profile,
@@ -181,10 +230,12 @@ class PayrollService {
         standardDayHours,
         minFullDayHours,
         minHalfDayHours,
+        minCheckoutForFullDay,
         otRateMultiplier,
         lateThresholdMinutes,
         empInOutMap,
-        empPunchesMap
+        empPunchesMap,
+        empAdj
       );
     });
   }
@@ -202,10 +253,12 @@ class PayrollService {
     standardDayHours: number,
     minFullDayHours: number,
     minHalfDayHours: number,
+    minCheckoutForFullDay: string,
     otRateMultiplier: number,
     lateThresholdMinutes: number,
     inOutByDate: Map<string, any>,
-    punchesByDate: Map<string, any[]>
+    punchesByDate: Map<string, any[]>,
+    adjustment?: EmployeeOtAdjustment
   ): EmployeePayrollSummary {
     let presentDays = 0;
     let halfDays = 0;
@@ -241,18 +294,27 @@ class PayrollService {
       } else if (isOff) {
         weeklyOffs++;
       } else if (ioRec) {
-        if (ioRec.status === 'P') presentDays++;
-        else if (ioRec.status === 'P/2') halfDays++;
-        else if (ioRec.status === 'W' || ioRec.status === 'WO') weeklyOffs++;
-        else if (ioRec.status === 'HL' || ioRec.status === 'H') holidayCount++;
-        else if (ioRec.status === 'A') absentDays++;
-        else {
-          if (ioRec.workMinutes && ioRec.workMinutes >= 480) presentDays++;
-          else if (ioRec.workMinutes && ioRec.workMinutes >= 240) halfDays++;
-          else absentDays++;
+        const hasIn = Boolean(ioRec.inTime && ioRec.inTime !== '--:--');
+        const hasOut = Boolean(ioRec.outTime && ioRec.outTime !== '--:--');
+        const isSingleSwipe = (hasIn !== hasOut);
+        const workMin = ioRec.workMinutes || 0;
+        const outTimeStr = (ioRec.outTime && ioRec.outTime !== '--:--') ? ioRec.outTime.slice(0, 5) : '';
+        const meetsCheckoutCutoff = Boolean(minCheckoutForFullDay && outTimeStr && outTimeStr >= minCheckoutForFullDay && workMin >= (minHalfDayHours * 60));
+        const isFullDayWork = workMin >= (minFullDayHours * 60) || meetsCheckoutCutoff;
+
+        if (ioRec.status === 'W' || ioRec.status === 'WO') {
+          weeklyOffs++;
+        } else if (ioRec.status === 'HL' || ioRec.status === 'H') {
+          holidayCount++;
+        } else if (ioRec.status === 'P' || isFullDayWork || isSingleSwipe) {
+          presentDays++;
+        } else if (ioRec.status === 'P/2' || ioRec.status === 'HALF' || workMin >= (minHalfDayHours * 60)) {
+          halfDays++;
+        } else {
+          presentDays++;
         }
 
-        const hrs = (ioRec.workMinutes || 0) / 60;
+        const hrs = (ioRec.workMinutes || (isSingleSwipe ? standardDayHours * 60 : 0)) / 60;
         totalWorkHours += hrs;
 
         if (ioRec.overTime && ioRec.overTime !== '00:00' && ioRec.overTime !== '--:--') {
@@ -269,6 +331,9 @@ class PayrollService {
         const firstIn = new Date(sorted[0].punchDateTime).getTime();
         const lastOut = new Date(sorted[sorted.length - 1].punchDateTime).getTime();
         const durationHours = Math.max(0, (lastOut - firstIn) / (1000 * 60 * 60));
+        const durationMinutes = Math.round(durationHours * 60);
+        const lastDate = new Date(sorted[sorted.length - 1].punchDateTime);
+        const lastPunchTimeStr = `${String(lastDate.getHours()).padStart(2, '0')}:${String(lastDate.getMinutes()).padStart(2, '0')}`;
 
         totalWorkHours += durationHours;
 
@@ -276,7 +341,9 @@ class PayrollService {
           totalOtHours += (durationHours - standardDayHours);
         }
 
-        if (durationHours >= minFullDayHours) {
+        const meetsCheckoutCutoff = Boolean(minCheckoutForFullDay && lastPunchTimeStr >= minCheckoutForFullDay && durationMinutes >= (minHalfDayHours * 60));
+
+        if (durationHours >= minFullDayHours || meetsCheckoutCutoff) {
           presentDays++;
         } else if (durationHours >= minHalfDayHours) {
           halfDays++;
@@ -290,47 +357,75 @@ class PayrollService {
           lateArrivals++;
         }
       } else if (dayPunches.length === 1) {
-        halfDays++;
-        totalWorkHours += 4.0;
+        // Single swipe recorded: credit as payable day (0 LOP)
+        presentDays++;
+        totalWorkHours += standardDayHours;
       } else {
-        absentDays++;
+        // Unrecorded / missed swipes are covered (0 Loss of Pay)
+        presentDays++;
+        totalWorkHours += standardDayHours;
       }
     }
 
-    // Month-to-Date (MTD) Payable Days Math
-    const payableDays = Number((presentDays + (halfDays * 0.5) + weeklyOffs + holidayCount).toFixed(1));
-    const lopDays = Math.max(0, Number((elapsedDays - payableDays).toFixed(1)));
+    // Apply saved adjustments if any
+    if (adjustment) {
+      if (adjustment.totalWorkHours !== undefined && adjustment.totalWorkHours >= 0) {
+        totalWorkHours = adjustment.totalWorkHours;
+      }
+      if (adjustment.otHours !== undefined && adjustment.otHours >= 0) {
+        totalOtHours = adjustment.otHours;
+      }
+      if (adjustment.multiplier !== undefined && adjustment.multiplier >= 0) {
+        otRateMultiplier = adjustment.multiplier;
+      }
+    }
+
+    // Month-to-Date (MTD) Payable Days Math (100% Paid, 0 LOP)
+    const payableDays = elapsedDays;
+    const lopDays = 0;
 
     // Compensation & Salary Engine (Annexure K Breakdown)
     const hasSalarySet = profile.monthlyCtc !== undefined && profile.monthlyCtc !== null && Number(profile.monthlyCtc) > 0;
     const monthlyCtc = hasSalarySet ? Number(profile.monthlyCtc) : 0;
     const basicSalary = hasSalarySet ? (profile.basicSalary || Math.round(monthlyCtc * 0.50)) : 0;
     const hra = hasSalarySet ? (profile.hra || Math.round(monthlyCtc * 0.20)) : 0;
-    const specialAllowance = hasSalarySet ? (profile.specialAllowance ?? (profile.allowances !== undefined ? profile.allowances : Math.max(0, (profile.grossSalary || (monthlyCtc - 2000)) - basicSalary - hra))) : 0;
-
-    const grossSalary = hasSalarySet ? (profile.grossSalary || (basicSalary + hra + specialAllowance)) : 0;
     const pfDeduction = hasSalarySet ? (profile.employeePf ?? Math.min(1800, Math.round(basicSalary * 0.12))) : 0;
+    const employerPf = hasSalarySet ? (profile.employerPf ?? Math.min(1800, Math.round(basicSalary * 0.12))) : 0;
     const esiDeduction = hasSalarySet ? (profile.employeeEsic ?? (monthlyCtc <= 21000 ? Math.round(monthlyCtc * 0.0075) : 0)) : 0;
+    const employerEsic = hasSalarySet ? (profile.employerEsic ?? 0) : 0;
     const ptDeduction = hasSalarySet ? (profile.professionalTax ?? (monthlyCtc >= 15000 ? 200 : 0)) : 0;
 
+    const specialAllowance = hasSalarySet ? (profile.specialAllowance ?? (profile.allowances !== undefined ? profile.allowances : Math.max(0, monthlyCtc - basicSalary - hra - employerPf - ptDeduction))) : 0;
+    const grossSalary = hasSalarySet ? (profile.grossSalary || (basicSalary + hra + specialAllowance)) : 0;
+    const totalNetSalary = hasSalarySet ? Math.max(0, grossSalary - pfDeduction - esiDeduction) : 0;
+
     const standardHourlyWage = hasSalarySet ? monthlyCtc / (26 * standardDayHours) : 0;
-    // profile.otRatePerHour lets a specific employee's OT rate be defined individually;
-    // otherwise it falls back to the company-wide multiplier set in Settings.
-    const otRatePerHour = profile.otRatePerHour || Math.round(standardHourlyWage * otRateMultiplier);
+    
+    // Determine effective multiplier and rate
+    let effectiveMultiplier = otRateMultiplier;
+    if (adjustment?.multiplier !== undefined && adjustment.multiplier > 0) {
+      effectiveMultiplier = adjustment.multiplier;
+    } else if (profile.otRatePerHour !== undefined && profile.otRatePerHour > 0 && profile.otRatePerHour <= 10) {
+      // Profile value was entered as a multiplier (e.g. 1.5, 2, 3)
+      effectiveMultiplier = profile.otRatePerHour;
+    }
+
+    let otRatePerHour = Math.round(standardHourlyWage * effectiveMultiplier * 100) / 100;
+    if (profile.otRatePerHour && profile.otRatePerHour > 10 && adjustment?.multiplier === undefined) {
+      // Absolute custom rupee rate per hour (if > 10)
+      otRatePerHour = profile.otRatePerHour;
+    }
     const otEarnings = (profile.otEligible && hasSalarySet) ? Math.round(totalOtHours * otRatePerHour) : 0;
 
     const dailyWage = hasSalarySet ? grossSalary / totalMonthDays : 0;
     const lopDeduction = Math.round(lopDays * dailyWage);
-    const totalDeductions = lopDeduction + pfDeduction + esiDeduction + ptDeduction;
+    // Employee deductions from Gross Salary (Annexure K Row E: Employee PF)
+    const totalDeductions = lopDeduction + pfDeduction + esiDeduction;
 
-    // Earnings are scaled to the days that have actually elapsed so far this month
-    // (elapsedDays), not the full month — crediting days that haven't happened yet
-    // as if already worked would overstate mid-month take-home pay. Basic/HRA/Special
-    // Allowance above stay as the full monthly salary structure (Annexure reference
-    // figures); only the earnings actually paid out are prorated here.
+    // Live Month-to-Date (MTD) Accrued Earnings (scaled dynamically to elapsed days)
     const elapsedEarnings = hasSalarySet ? Math.round(dailyWage * elapsedDays) : 0;
     const grossEarnings = elapsedEarnings + otEarnings;
-    const netPayable = hasSalarySet ? Math.max(0, grossEarnings - totalDeductions) : 0;
+    const netPayable = hasSalarySet ? Math.max(0, elapsedEarnings - totalDeductions + otEarnings) : 0;
     const netPayableWords = hasSalarySet ? numberToWordsIndian(netPayable) : 'Salary Not Configured';
 
     return {
@@ -359,6 +454,9 @@ class PayrollService {
       basicSalary,
       hra,
       allowances: specialAllowance,
+      grossSalary,
+      employerPf,
+      employerEsic,
       otRatePerHour,
       otEarnings,
       grossEarnings,
@@ -367,6 +465,7 @@ class PayrollService {
       esiDeduction,
       ptDeduction,
       totalDeductions,
+      totalNetSalary,
       netPayable,
       netPayableWords,
       bankAccount: profile.bankAccount,

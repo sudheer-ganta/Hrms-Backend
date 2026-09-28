@@ -38,15 +38,15 @@ export class RequestsController {
     }
   }
 
-  public static updateStatus(req: Request, res: Response): void {
+  public static async updateStatus(req: Request, res: Response): Promise<void> {
     try {
       const id = req.params.id as string;
-      const { status, reviewComment } = req.body;
+      const { status, reviewComment, reviewedBy } = req.body;
       if (!status || !['APPROVED', 'REJECTED'].includes(status)) {
         res.status(400).json({ success: false, error: 'Valid status (APPROVED | REJECTED) required' });
         return;
       }
-      const updated = requestsService.updateStatus(id, status, reviewComment);
+      const updated = await requestsService.updateStatus(id, status, reviewComment, reviewedBy);
       if (!updated) {
         res.status(404).json({ success: false, error: 'Request not found' });
         return;

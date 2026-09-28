@@ -12,6 +12,7 @@ router.get('/me', requireAuth, (req, res) => authController.getMe(req, res));
 
 // Super Admin User Management routes
 router.post('/create-user', requireAuth, requireRole(['SUPER_ADMIN']), (req, res) => authController.createUser(req, res));
+router.post('/users', requireAuth, requireRole(['SUPER_ADMIN']), (req, res) => authController.createUser(req, res));
 router.get('/users', requireAuth, requireRole(['SUPER_ADMIN']), (req, res) => authController.getAllUsers(req, res));
 router.delete('/users/:id', requireAuth, requireRole(['SUPER_ADMIN']), (req, res) => authController.deleteUser(req, res));
 router.post('/users/:id/toggle-status', requireAuth, requireRole(['SUPER_ADMIN']), (req, res) => authController.toggleStatus(req, res));

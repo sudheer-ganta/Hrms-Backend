@@ -3,9 +3,10 @@
     "shiftName": "General Shift",
     "startTime": "09:00",
     "endTime": "17:30",
-    "gracePeriodMinutes": 15,
-    "halfDayThresholdMinutes": 240,
-    "fullDayThresholdMinutes": 480,
+    "gracePeriodMinutes": 60,
+    "halfDayThresholdMinutes": 180,
+    "fullDayThresholdMinutes": 360,
+    "minCheckoutForFullDay": "16:00",
     "breakDurationMinutes": 60
   },
   "overtime": {
@@ -13,6 +14,12 @@
     "minOvertimeMinutes": 30,
     "overtimeAfterHours": 8,
     "defaultRateMultiplier": 1.5
+  },
+  "leaves": {
+    "casualLeave": 12,
+    "sickLeave": 12,
+    "earnedLeave": 15,
+    "compOff": 2
   },
   "weeklyOffDays": [
     "Sunday"
@@ -35,5 +42,5 @@
     "enabled": true,
     "intervalMinutes": 5
   },
-  "updatedAt": "2026-09-26T05:03:28.760Z"
+  "updatedAt": "2026-09-28T07:52:54.168Z"
 }

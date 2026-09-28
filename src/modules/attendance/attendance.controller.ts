@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { attendanceService } from './attendance.service.js';
+import { punchService } from './punch.service.js';
+import { AuthRequest } from '../../middleware/auth.middleware.js';
 
 export class AttendanceController {
   /**
@@ -73,6 +75,67 @@ export class AttendanceController {
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to retrieve dashboard statistics',
+      });
+    }
+  }
+
+  /**
+   * GET /api/attendance/punch/today
+   * Get current employee's punch status for today (IST)
+   */
+  public static async getTodayPunchStatus(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const empCode = (req.query.empCode as string) || req.user?.empCode || '0132';
+      const status = await punchService.getTodayStatus(empCode);
+      res.json({
+        success: true,
+        data: status,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to retrieve today punch status',
+      });
+    }
+  }
+
+  /**
+   * POST /api/attendance/punch
+   * Record Check-In / Check-Out with server-enforced IST time and GPS location
+   */
+  public static async recordPunch(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const { punchType, latitude, longitude, accuracy, address, notes, empCode } = req.body;
+      const finalEmpCode = empCode || req.user?.empCode;
+
+      if (!finalEmpCode) {
+        res.status(400).json({
+          success: false,
+          error: 'Employee code is required to record attendance punch.',
+        });
+        return;
+      }
+
+      const result = await punchService.recordPunch({
+        empCode: finalEmpCode,
+        empName: req.user?.name,
+        punchType: punchType || 'AUTO',
+        latitude: latitude !== undefined ? Number(latitude) : undefined,
+        longitude: longitude !== undefined ? Number(longitude) : undefined,
+        accuracy: accuracy !== undefined ? Number(accuracy) : undefined,
+        address: address || notes,
+        deviceInfo: req.headers['user-agent'],
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to record punch',
       });
     }
   }

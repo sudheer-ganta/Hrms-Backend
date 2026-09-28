@@ -2,61 +2,74 @@ import mongoose from 'mongoose';
 import { ENV } from './env.js';
 
 let isConnected = false;
-let reconnectTimer: NodeJS.Timeout | null = null;
-const RECONNECT_INTERVAL_MS = 15000;
+let isConnecting = false;
+let listenersAttached = false;
 
-// The previous version of this file logged "Disconnected. Retrying..." but never
-// actually scheduled a retry — once the initial connect failed or the connection
-// dropped, it stayed down until the whole process was restarted, even after the
-// network recovered. Confirmed this in practice: Atlas connectivity from this
-// environment is intermittent, and a dropped connection otherwise required a
-// manual server restart to recover, even though a fresh connect attempt right
-// next to it succeeded immediately. This schedules real background retries.
-const scheduleReconnect = (): void => {
-  if (reconnectTimer) return; // a retry is already pending
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connectDatabase().catch(() => {
-      // connectDatabase() already logs and reschedules on failure
-    });
-  }, RECONNECT_INTERVAL_MS);
+const attachEventListeners = (): void => {
+  if (listenersAttached) return;
+  listenersAttached = true;
+
+  mongoose.connection.on('connected', () => {
+    isConnected = true;
+    isConnecting = false;
+    console.log('✅ MongoDB Connected to Atlas successfully');
+  });
+
+  mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB Connection Error:', err.message);
+    isConnected = false;
+    isConnecting = false;
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB Disconnected. Driver will auto-reconnect...');
+    isConnected = false;
+    isConnecting = false;
+  });
+
+  mongoose.connection.on('reconnected', () => {
+    console.log('🔄 MongoDB Reconnected to Atlas');
+    isConnected = true;
+    isConnecting = false;
+  });
 };
 
 export const connectDatabase = async (): Promise<boolean> => {
-  if (isConnected) {
+  if (isConnected || mongoose.connection.readyState === 1) {
+    isConnected = true;
     return true;
   }
 
+  if (isConnecting || mongoose.connection.readyState === 2) {
+    return false;
+  }
+
+  attachEventListeners();
+  isConnecting = true;
+
   try {
     mongoose.set('strictQuery', false);
+
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 15000,
+      maxPoolSize: 25,
+      minPoolSize: 2,
+      heartbeatFrequencyMS: 10000,
+      family: 4, // Force IPv4 to eliminate Windows/ISP DNS resolution delays
+      retryWrites: true,
+      retryReads: true,
     });
 
     isConnected = true;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
-
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB Connection Error:', err.message);
-      isConnected = false;
-      scheduleReconnect();
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.warn(`⚠️ MongoDB Disconnected. Retrying every ${RECONNECT_INTERVAL_MS / 1000}s...`);
-      isConnected = false;
-      scheduleReconnect();
-    });
-
+    isConnecting = false;
+    console.log(`✅ MongoDB Connection Established: ${conn.connection.host}/${conn.connection.name}`);
     return true;
   } catch (error: any) {
-    console.warn(`⚠️ MongoDB connection warning: ${error?.message || error}`);
-    console.warn(`👉 The server will keep running and retry every ${RECONNECT_INTERVAL_MS / 1000}s in the background.`);
-    scheduleReconnect();
+    isConnecting = false;
+    isConnected = false;
+    console.error(`❌ MongoDB connection failed: ${error?.message || error}`);
     return false;
   }
 };
@@ -67,3 +80,4 @@ export const getDbStatus = (): { connected: boolean; uri: string } => {
     uri: ENV.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'),
   };
 };
+

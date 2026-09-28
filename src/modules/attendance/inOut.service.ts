@@ -7,6 +7,7 @@ import {
   getTodayDateString
 } from '../../utils/dateUtils.js';
 import { InOutModel } from './inOut.model.js';
+import { AttendanceModel } from './attendance.model.js';
 import { localStore } from '../../config/localStore.js';
 import {
   IInOutRecord,
@@ -329,6 +330,9 @@ export class InOutService {
       records = all.slice(skip, skip + pageSize);
     }
 
+    // Auto-reconcile any records missing OUT time using raw biometric punches
+    records = await this.reconcileWithRawPunches(records);
+
     // Compute summary metrics across matching set
     const allMatching = isDbConnected
       ? await InOutModel.find(
@@ -340,7 +344,7 @@ export class InOutService {
             else if (toDate) q.date = { $lte: toDate };
             return q;
           })()
-        ).lean()
+        ).select('status workMinutes overTime lateIn').lean()
       : localStore.getInOutRecords().filter((r) => {
           if (sourceId && sourceId !== 'all' && r.sourceId !== sourceId.toLowerCase().trim()) return false;
           if (fromDate && r.date < fromDate) return false;
@@ -395,6 +399,117 @@ export class InOutService {
   }
 
   /**
+   * Reconciles InOut records with actual biometric machine punches
+   * when e-TimeOffice reports missing OUT times or zero work duration.
+   */
+  private async reconcileWithRawPunches(records: IInOutRecord[]): Promise<IInOutRecord[]> {
+    if (!records || records.length === 0) return records;
+    const isDbConnected = mongoose.connection.readyState === 1;
+
+    const needsReconciliation = records.filter(
+      (r) => !r.outTime || r.outTime === '--:--' || !r.workMinutes || r.workMinutes === 0
+    );
+    if (needsReconciliation.length === 0) return records;
+
+    const empCodes = Array.from(new Set(needsReconciliation.map((r) => r.employeeCode)));
+    const dates = Array.from(new Set(needsReconciliation.map((r) => r.date)));
+
+    let rawPunches: any[] = [];
+    if (isDbConnected) {
+      try {
+        rawPunches = await AttendanceModel.find({
+          employeeCode: { $in: empCodes },
+          entryDate: { $in: dates },
+        }).lean();
+      } catch (err) {
+        console.warn('[InOutService] Could not fetch raw punches for reconciliation:', err);
+      }
+    } else {
+      rawPunches = localStore.getRecords().filter(
+        (p: any) => empCodes.includes(p.employeeCode) && dates.includes(p.entryDate)
+      );
+    }
+
+    if (!rawPunches || rawPunches.length === 0) return records;
+
+    // Group punches by `employeeCode_entryDate`
+    const punchMap = new Map<string, any[]>();
+    for (const p of rawPunches) {
+      const key = `${p.employeeCode}_${p.entryDate}`;
+      if (!punchMap.has(key)) punchMap.set(key, []);
+      punchMap.get(key)!.push(p);
+    }
+
+    const updatesToPersist: any[] = [];
+
+    for (const r of records) {
+      if (r.outTime && r.outTime !== '--:--' && r.workMinutes && r.workMinutes > 0) continue;
+
+      const key = `${r.employeeCode}_${r.date}`;
+      const dayPunches = punchMap.get(key);
+      if (!dayPunches || dayPunches.length < 2) continue;
+
+      const sorted = [...dayPunches].sort(
+        (a, b) => new Date(a.punchDateTime).getTime() - new Date(b.punchDateTime).getTime()
+      );
+      const firstPunch = sorted[0];
+      const lastPunch = sorted[sorted.length - 1];
+
+      const firstTimeStr = firstPunch.entryTime ? firstPunch.entryTime.slice(0, 5) : formatMinutesToHours(new Date(firstPunch.punchDateTime).getHours() * 60 + new Date(firstPunch.punchDateTime).getMinutes());
+      const lastTimeStr = lastPunch.entryTime ? lastPunch.entryTime.slice(0, 5) : formatMinutesToHours(new Date(lastPunch.punchDateTime).getHours() * 60 + new Date(lastPunch.punchDateTime).getMinutes());
+
+      if (firstTimeStr === lastTimeStr) continue;
+
+      const firstMs = new Date(firstPunch.punchDateTime).getTime();
+      const lastMs = new Date(lastPunch.punchDateTime).getTime();
+      const durationMinutes = Math.max(0, Math.round((lastMs - firstMs) / (1000 * 60)));
+
+      if (durationMinutes > 0) {
+        if (!r.inTime || r.inTime === '--:--') r.inTime = firstTimeStr;
+        r.outTime = lastTimeStr;
+        r.workMinutes = durationMinutes;
+        r.workTime = formatMinutesToHours(durationMinutes);
+        if (durationMinutes >= 480) {
+          r.status = 'P';
+          r.statusLabel = 'Present';
+        } else if (durationMinutes >= 240) {
+          r.status = 'P/2';
+          r.statusLabel = 'Half Day';
+        }
+        if (r.remark === 'MIS') r.remark = '--';
+
+        updatesToPersist.push({
+          recordKey: r.recordKey,
+          inTime: r.inTime,
+          outTime: r.outTime,
+          workMinutes: r.workMinutes,
+          workTime: r.workTime,
+          status: r.status,
+          statusLabel: r.statusLabel,
+          remark: r.remark,
+        });
+      }
+    }
+
+    if (updatesToPersist.length > 0) {
+      if (isDbConnected) {
+        InOutModel.bulkWrite(
+          updatesToPersist.map((u) => ({
+            updateOne: {
+              filter: { recordKey: u.recordKey },
+              update: { $set: u },
+            },
+          })),
+          { ordered: false }
+        ).catch((e) => console.warn('[InOutService] Async bulkWrite error:', e.message));
+      }
+      localStore.upsertInOutRecords(updatesToPersist as any);
+    }
+
+    return records;
+  }
+
+  /**
    * Generates a complete employee timesheet matrix across a date range
    */
   public async getTimesheetMatrix(filters: {
@@ -417,6 +532,9 @@ export class InOutService {
         return r.date >= fromDate && r.date <= toDate;
       });
     }
+
+    // Reconcile raw punches for timesheet matrix
+    records = await this.reconcileWithRawPunches(records);
 
     if (search && search.trim()) {
       const query = search.trim().toLowerCase();
@@ -458,7 +576,11 @@ export class InOutService {
         overTime: r.overTime,
       };
 
-      if (r.status === 'P' || r.status === 'P/2') {
+      const hasIn = Boolean(r.inTime && r.inTime !== '--:--');
+      const hasOut = Boolean(r.outTime && r.outTime !== '--:--');
+      const isSingleSwipe = (hasIn !== hasOut);
+
+      if (r.status === 'P' || r.status === 'P/2' || isSingleSwipe) {
         sheet.totalDaysPresent += r.status === 'P/2' ? 0.5 : 1;
       } else if (r.status === 'A') {
         sheet.totalDaysAbsent += 1;

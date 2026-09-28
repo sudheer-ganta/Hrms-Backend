@@ -14,6 +14,8 @@ const PROFILES_FILE = path.join(DATA_DIR, 'employee_profiles.json');
 
 class EmployeeMasterService {
   private profilesMap: Map<string, EmployeeProfile> = new Map();
+  private lastDiscoveryTime = 0;
+  private static readonly DISCOVERY_INTERVAL_MS = 60 * 1000; // at most once every 60s
 
   constructor() {
     this.ensureDataDir();
@@ -56,13 +58,34 @@ class EmployeeMasterService {
    */
   public async getAllProfiles(): Promise<EmployeeProfile[]> {
     this.loadProfiles();
+
+    const now = Date.now();
+    // Fast return if profiles are already loaded and discovery ran recently
+    if (this.profilesMap.size > 0 && now - this.lastDiscoveryTime < EmployeeMasterService.DISCOVERY_INTERVAL_MS) {
+      return Array.from(this.profilesMap.values());
+    }
+    this.lastDiscoveryTime = now;
+
     const isDbConnected = mongoose.connection.readyState === 1;
-    const inOutRecords = isDbConnected
-      ? await InOutModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).lean()
-      : localStore.getInOutRecords();
-    const rawRecords = isDbConnected
-      ? await AttendanceModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).lean()
-      : localStore.getRecords();
+    let inOutRecords: any[] = [];
+    let rawRecords: any[] = [];
+
+    if (isDbConnected) {
+      try {
+        [inOutRecords, rawRecords] = await Promise.all([
+          InOutModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
+          AttendanceModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
+        ]);
+      } catch {
+        inOutRecords = [];
+        rawRecords = [];
+      }
+    }
+
+    if (inOutRecords.length === 0 && rawRecords.length === 0) {
+      inOutRecords = localStore.getInOutRecords().slice(0, 500);
+      rawRecords = localStore.getRecords().slice(0, 500);
+    }
     const enrolledMap = new Map<string, { name: string; location: string }>();
 
     for (const r of inOutRecords) {

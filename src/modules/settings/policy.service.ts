@@ -8,10 +8,11 @@ const DEFAULT_SETTINGS: HRMSPolicySettings = {
   shift: {
     shiftName: 'General Shift',
     startTime: '09:00',
-    endTime: '18:00',
-    gracePeriodMinutes: 15,
-    halfDayThresholdMinutes: 240,
-    fullDayThresholdMinutes: 480,
+    endTime: '17:30',
+    gracePeriodMinutes: 60,
+    halfDayThresholdMinutes: 180,
+    fullDayThresholdMinutes: 360,
+    minCheckoutForFullDay: '16:00',
     breakDurationMinutes: 60,
   },
   overtime: {
@@ -19,6 +20,12 @@ const DEFAULT_SETTINGS: HRMSPolicySettings = {
     minOvertimeMinutes: 30,
     overtimeAfterHours: 8,
     defaultRateMultiplier: 1.5,
+  },
+  leaves: {
+    casualLeave: 12,
+    sickLeave: 12,
+    earnedLeave: 15,
+    compOff: 2,
   },
   weeklyOffDays: ['Sunday'],
   holidays: [],
@@ -42,6 +49,7 @@ export class PolicyService {
           ...parsed,
           shift: { ...DEFAULT_SETTINGS.shift, ...parsed.shift },
           overtime: { ...DEFAULT_SETTINGS.overtime, ...parsed.overtime },
+          leaves: { ...DEFAULT_SETTINGS.leaves, ...parsed.leaves },
           scheduler: { ...DEFAULT_SETTINGS.scheduler, ...parsed.scheduler },
         };
       }
@@ -58,6 +66,7 @@ export class PolicyService {
       ...partial,
       shift: partial.shift ? { ...current.shift, ...partial.shift } : current.shift,
       overtime: partial.overtime ? { ...current.overtime, ...partial.overtime } : current.overtime,
+      leaves: partial.leaves ? { ...current.leaves, ...partial.leaves } : current.leaves,
       scheduler: partial.scheduler ? { ...current.scheduler, ...partial.scheduler } : current.scheduler,
       updatedAt: new Date().toISOString(),
     };

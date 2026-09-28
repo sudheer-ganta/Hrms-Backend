@@ -36,58 +36,62 @@ export class AttendanceService {
     const skip = (currentPage - 1) * pageSize;
 
     if (isDbConnected) {
-      const query: any = {};
+      try {
+        const query: any = {};
 
-      if (sourceId && sourceId !== 'all') {
-        query.sourceId = sourceId.toLowerCase().trim();
+        if (sourceId && sourceId !== 'all') {
+          query.sourceId = sourceId.toLowerCase().trim();
+        }
+
+        if (fromDate && toDate) {
+          query.entryDate = { $gte: fromDate, $lte: toDate };
+        } else if (fromDate) {
+          query.entryDate = { $gte: fromDate };
+        } else if (toDate) {
+          query.entryDate = { $lte: toDate };
+        }
+
+        if (employeeCode) {
+          query.employeeCode = employeeCode.trim().toUpperCase();
+        }
+
+        if (search && search.trim()) {
+          const searchRegex = new RegExp(search.trim(), 'i');
+          query.$or = [
+            { employeeCode: searchRegex },
+            { employeeName: searchRegex },
+          ];
+        }
+
+        if (machineId) {
+          query.machineId = String(machineId).trim();
+        }
+
+        const sortOptions: any = {
+          [sortBy]: sortOrder === 'asc' ? 1 : -1,
+        };
+
+        const [total, records] = await Promise.all([
+          AttendanceModel.countDocuments(query),
+          AttendanceModel.find(query)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(pageSize)
+            .lean(),
+        ]);
+
+        return {
+          data: records as unknown as IAttendanceRecord[],
+          pagination: {
+            page: currentPage,
+            limit: pageSize,
+            total,
+            totalPages: Math.ceil(total / pageSize) || 1,
+          },
+        };
+      } catch (dbErr) {
+        console.warn('MongoDB query failed in getAttendanceRecords, falling back to local store:', dbErr);
       }
-
-      if (fromDate && toDate) {
-        query.entryDate = { $gte: fromDate, $lte: toDate };
-      } else if (fromDate) {
-        query.entryDate = { $gte: fromDate };
-      } else if (toDate) {
-        query.entryDate = { $lte: toDate };
-      }
-
-      if (employeeCode) {
-        query.employeeCode = employeeCode.trim().toUpperCase();
-      }
-
-      if (search && search.trim()) {
-        const searchRegex = new RegExp(search.trim(), 'i');
-        query.$or = [
-          { employeeCode: searchRegex },
-          { employeeName: searchRegex },
-        ];
-      }
-
-      if (machineId) {
-        query.machineId = String(machineId).trim();
-      }
-
-      const sortOptions: any = {
-        [sortBy]: sortOrder === 'asc' ? 1 : -1,
-      };
-
-      const [total, records] = await Promise.all([
-        AttendanceModel.countDocuments(query),
-        AttendanceModel.find(query)
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(pageSize)
-          .lean(),
-      ]);
-
-      return {
-        data: records as unknown as IAttendanceRecord[],
-        pagination: {
-          page: currentPage,
-          limit: pageSize,
-          total,
-          totalPages: Math.ceil(total / pageSize) || 1,
-        },
-      };
     }
 
     // Local Fallback Store
@@ -178,137 +182,154 @@ export class AttendanceService {
     ];
 
     if (isDbConnected) {
-      const baseQuery: any = {};
-      if (targetSourceId) baseQuery.sourceId = targetSourceId;
+      try {
+        const baseQuery: any = {};
+        if (targetSourceId) baseQuery.sourceId = targetSourceId;
 
-      const dateQuery: any = { ...baseQuery, entryDate: targetDate };
+        const dateQuery: any = { ...baseQuery, entryDate: targetDate };
 
-      const [
-        totalRecords, 
-        allDistinctEmpCodes,
-        datePunches, 
-        dateActiveEmpCodes, 
-        lastSyncLog, 
-        recentPunches, 
-        datePunchRecords
-      ] = await Promise.all([
-        AttendanceModel.countDocuments(baseQuery),
-        AttendanceModel.distinct('employeeCode', baseQuery),
-        AttendanceModel.countDocuments(dateQuery),
-        AttendanceModel.distinct('employeeCode', dateQuery),
-        SyncLogModel.findOne(targetSourceId ? { sourceId: targetSourceId } : {}).sort({ startedAt: -1 }).lean(),
-        AttendanceModel.find(dateQuery).sort({ punchDateTime: -1 }).limit(10).lean(),
-        AttendanceModel.find(dateQuery).select('employeeCode entryTime punchDateTime').lean(),
-      ]);
+        const [
+          totalRecords, 
+          allDistinctEmpCodes,
+          datePunches, 
+          dateActiveEmpCodes, 
+          lastSyncLog, 
+          recentPunches, 
+          datePunchRecords
+        ] = await Promise.all([
+          AttendanceModel.countDocuments(baseQuery),
+          AttendanceModel.distinct('employeeCode', baseQuery),
+          AttendanceModel.countDocuments(dateQuery),
+          AttendanceModel.distinct('employeeCode', dateQuery),
+          SyncLogModel.findOne(targetSourceId ? { sourceId: targetSourceId } : {}).sort({ startedAt: -1 }).lean(),
+          AttendanceModel.find(dateQuery).sort({ punchDateTime: -1 }).limit(10).lean(),
+          AttendanceModel.find(dateQuery).select('employeeCode entryTime punchDateTime').lean(),
+        ]);
 
-      // Calculate earliest punch per employee to check late arrivals (after 09:30 AM)
-      const empFirstPunch: Record<string, string> = {};
-      datePunchRecords.forEach((p) => {
-        const time = p.entryTime || (p.punchDateTime ? new Date(p.punchDateTime).toISOString().slice(11, 19) : '09:00:00');
-        if (!empFirstPunch[p.employeeCode] || time < empFirstPunch[p.employeeCode]) {
-          empFirstPunch[p.employeeCode] = time;
-        }
-      });
+        // Calculate earliest punch per employee to check late arrivals (after 09:30 AM)
+        const empFirstPunch: Record<string, string> = {};
+        datePunchRecords.forEach((p: any) => {
+          let time = '09:00:00';
+          if (p.entryTime && typeof p.entryTime === 'string') {
+            time = p.entryTime;
+          } else if (p.punchDateTime) {
+            try {
+              time = new Date(p.punchDateTime).toISOString().slice(11, 19);
+            } catch {
+              time = '09:00:00';
+            }
+          }
+          if (!empFirstPunch[p.employeeCode] || time < empFirstPunch[p.employeeCode]) {
+            empFirstPunch[p.employeeCode] = time;
+          }
+        });
 
-      let lateArrivalsCount = 0;
-      Object.values(empFirstPunch).forEach((t) => {
-        if (t > '09:30:00') lateArrivalsCount++;
-      });
+        let lateArrivalsCount = 0;
+        Object.values(empFirstPunch).forEach((t) => {
+          if (t > '09:30:00') lateArrivalsCount++;
+        });
 
-      // Calculate hourly punch distribution for this date
-      const hourlyMap: Record<number, number> = {};
-      datePunchRecords.forEach((p) => {
-        let h = -1;
-        if (p.entryTime && p.entryTime.includes(':')) {
-          h = parseInt(p.entryTime.split(':')[0], 10);
-        } else if (p.punchDateTime) {
-          h = new Date(p.punchDateTime).getHours();
-        }
-        if (h >= 0 && h <= 23) {
-          hourlyMap[h] = (hourlyMap[h] || 0) + 1;
-        }
-      });
+        // Calculate hourly punch distribution for this date
+        const hourlyMap: Record<number, number> = {};
+        datePunchRecords.forEach((p: any) => {
+          let h = -1;
+          if (p.entryTime && typeof p.entryTime === 'string' && p.entryTime.includes(':')) {
+            h = parseInt(p.entryTime.split(':')[0], 10);
+          } else if (p.punchDateTime) {
+            try {
+              h = new Date(p.punchDateTime).getHours();
+            } catch {
+              h = -1;
+            }
+          }
+          if (h >= 0 && h <= 23 && !isNaN(h)) {
+            hourlyMap[h] = (hourlyMap[h] || 0) + 1;
+          }
+        });
 
-      const hourlyDistribution = hourSlots.map((slot) => ({
-        hour: slot.hour,
-        label: slot.label,
-        punches: hourlyMap[slot.hourNum] || 0,
-      }));
+        const hourlyDistribution = hourSlots.map((slot) => ({
+          hour: slot.hour,
+          label: slot.label,
+          punches: hourlyMap[slot.hourNum] || 0,
+        }));
 
-      // Location breakdown for target date
-      const locationBreakdown = await Promise.all(
-        sources.map(async (src) => {
-          const [totalPunches, locationDatePunches, locTotalEmps, locActiveEmps, lastLocSync] = await Promise.all([
-            AttendanceModel.countDocuments({ sourceId: src.id }),
-            AttendanceModel.countDocuments({ sourceId: src.id, entryDate: targetDate }),
-            AttendanceModel.distinct('employeeCode', { sourceId: src.id }),
-            AttendanceModel.distinct('employeeCode', { sourceId: src.id, entryDate: targetDate }),
-            SyncLogModel.findOne({ sourceId: src.id }).sort({ startedAt: -1 }).lean(),
-          ]);
+        // Location breakdown for target date
+        const locationBreakdown = await Promise.all(
+          sources.map(async (src) => {
+            const [totalPunches, locationDatePunches, locTotalEmps, locActiveEmps, lastLocSync] = await Promise.all([
+              AttendanceModel.countDocuments({ sourceId: src.id }),
+              AttendanceModel.countDocuments({ sourceId: src.id, entryDate: targetDate }),
+              AttendanceModel.distinct('employeeCode', { sourceId: src.id }),
+              AttendanceModel.distinct('employeeCode', { sourceId: src.id, entryDate: targetDate }),
+              SyncLogModel.findOne({ sourceId: src.id }).sort({ startedAt: -1 }).lean(),
+            ]);
 
-          const totalWorkforce = locTotalEmps.length || (src.id === 'budigere' ? 256 : src.id === 'bidarahalli' ? 50 : 21);
-          const presentCount = locActiveEmps.length;
-          const absentCount = Math.max(0, totalWorkforce - presentCount);
-          const attendanceRate = Math.round((presentCount / (totalWorkforce || 1)) * 100);
+            const totalWorkforce = (locTotalEmps as string[]).length || (src.id === 'budigere' ? 256 : src.id === 'bidarahalli' ? 50 : 21);
+            const presentCount = (locActiveEmps as string[]).length;
+            const absentCount = Math.max(0, totalWorkforce - presentCount);
+            const attendanceRate = Math.round((presentCount / (totalWorkforce || 1)) * 100);
 
-          return {
-            sourceId: src.id,
-            sourceName: src.displayName,
-            totalWorkforce,
-            presentCount,
-            absentCount,
-            totalPunches,
-            todayPunches: locationDatePunches,
-            activeEmployeesToday: presentCount,
-            attendanceRate,
-            lastSyncStatus: lastLocSync?.status || (src.corporateId ? 'Ready' : 'Missing Env'),
-            lastSyncAt: lastLocSync?.completedAt || lastLocSync?.startedAt || null,
-          };
-        })
-      );
+            return {
+              sourceId: src.id,
+              sourceName: src.displayName,
+              totalWorkforce,
+              presentCount,
+              absentCount,
+              totalPunches,
+              todayPunches: locationDatePunches,
+              activeEmployeesToday: presentCount,
+              attendanceRate,
+              lastSyncStatus: lastLocSync?.status || (src.corporateId ? 'Ready' : 'Missing Env'),
+              lastSyncAt: lastLocSync?.completedAt || lastLocSync?.startedAt || null,
+            };
+          })
+        );
 
-      // HR Workforce Totals
-      const totalWorkforce = allDistinctEmpCodes.length || (targetSourceId ? 50 : 327);
-      const presentCount = dateActiveEmpCodes.length;
-      const absentCount = Math.max(0, totalWorkforce - presentCount);
-      const halfDayCount = Math.round(presentCount * 0.02);
-      const attendanceRate = Math.round((presentCount / (totalWorkforce || 1)) * 100);
-      const absenteeismRate = Math.max(0, 100 - attendanceRate);
+        // HR Workforce Totals
+        const totalWorkforce = (allDistinctEmpCodes as string[]).length || (targetSourceId ? (targetSourceId === 'office' ? 25 : targetSourceId === 'bidarahalli' ? 62 : 241) : 328);
+        const presentCount = (dateActiveEmpCodes as string[]).length;
+        const absentCount = Math.max(0, totalWorkforce - presentCount);
+        const halfDayCount = Math.round(presentCount * 0.02);
+        const attendanceRate = Math.round((presentCount / (totalWorkforce || 1)) * 100);
+        const absenteeismRate = Math.max(0, 100 - attendanceRate);
 
-      const statusBreakdown = {
-        present: presentCount,
-        absent: absentCount,
-        halfDay: halfDayCount,
-        weeklyOff: 0,
-        total: totalWorkforce,
-        presentPct: attendanceRate,
-        absentPct: absenteeismRate,
-        halfDayPct: Math.round((halfDayCount / (totalWorkforce || 1)) * 100),
-      };
+        const statusBreakdown = {
+          present: presentCount,
+          absent: absentCount,
+          halfDay: halfDayCount,
+          weeklyOff: 0,
+          total: totalWorkforce,
+          presentPct: attendanceRate,
+          absentPct: absenteeismRate,
+          halfDayPct: Math.round((halfDayCount / (totalWorkforce || 1)) * 100),
+        };
 
-      // If no punches on this date, get overall recent punches
-      const displayRecentPunches = recentPunches.length > 0 
-        ? recentPunches 
-        : await AttendanceModel.find(baseQuery).sort({ punchDateTime: -1 }).limit(10).lean();
+        // If no punches on this date, get overall recent punches
+        const displayRecentPunches = recentPunches.length > 0 
+          ? recentPunches 
+          : await AttendanceModel.find(baseQuery).sort({ punchDateTime: -1 }).limit(10).lean();
 
-      return {
-        selectedDate: targetDate,
-        totalWorkforce,
-        presentCount,
-        absentCount,
-        lateArrivalsCount,
-        halfDayCount,
-        attendanceRate,
-        absenteeismRate,
-        todayPunches: datePunches,
-        totalRecords,
-        todayActiveEmployees: presentCount,
-        lastSyncAt: lastSyncLog?.completedAt || lastSyncLog?.startedAt || null,
-        locationBreakdown,
-        hourlyDistribution,
-        statusBreakdown,
-        recentPunches: displayRecentPunches as unknown as IAttendanceRecord[],
-      };
+        return {
+          selectedDate: targetDate,
+          totalWorkforce,
+          presentCount,
+          absentCount,
+          lateArrivalsCount,
+          halfDayCount,
+          attendanceRate,
+          absenteeismRate,
+          todayPunches: datePunches,
+          totalRecords,
+          todayActiveEmployees: presentCount,
+          lastSyncAt: lastSyncLog?.completedAt || lastSyncLog?.startedAt || null,
+          locationBreakdown,
+          hourlyDistribution,
+          statusBreakdown,
+          recentPunches: displayRecentPunches as unknown as IAttendanceRecord[],
+        };
+      } catch (dbErr) {
+        console.warn('MongoDB query failed in getDashboardStats, falling back to local store:', dbErr);
+      }
     }
 
     // Local Fallback Store Aggregations
