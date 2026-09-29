@@ -80,6 +80,10 @@ class EmailService {
                 <div class="stat-title">Overtime (OT) Logged</div>
                 <div class="stat-value" style="color: #10b981;">+${summary.totalOtHours} hrs (₹${summary.otEarnings})</div>
               </div>
+              ${(summary.sundayEarnings ?? 0) > 0 ? `<div class="stat-box">
+                <div class="stat-title">Sunday Working</div>
+                <div class="stat-value" style="color: #10b981;">${summary.sundayDays} day(s) (₹${summary.sundayEarnings})</div>
+              </div>` : ''}
             </div>
 
             <div class="salary-banner">

@@ -177,7 +177,7 @@ class EmployeeMasterService {
       }
 
       if (specialAllowance === undefined) {
-        specialAllowance = Math.max(0, grossSalary - basicSalary - hra);
+        specialAllowance = Math.max(0, grossSalary - basicSalary - (input.da ?? existing.da ?? 0) - (input.otherAllowance ?? existing.otherAllowance ?? 0) - hra);
       }
 
       if (totalNetSalary === undefined) {
@@ -191,9 +191,11 @@ class EmployeeMasterService {
       monthlyCtc: ctc,
       annualCtc: ctc ? ctc * 12 : undefined,
       basicSalary,
+      da: input.da !== undefined && input.da !== null ? Number(input.da) : existing.da,
       fixedSalary,
       hra,
       specialAllowance,
+      otherAllowance: input.otherAllowance !== undefined && input.otherAllowance !== null ? Number(input.otherAllowance) : existing.otherAllowance,
       grossSalary,
       employeePf,
       employeeEsic,

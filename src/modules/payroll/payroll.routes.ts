@@ -14,6 +14,7 @@ router.post('/send-payslip', payrollController.sendPayslip);
 // Super Admin / Founder, and the real user's identity is what gets recorded
 // in the permanent audit trail for save/clear actions.
 router.get('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.getAdjustments);
+router.post('/preview/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.previewPayroll);
 router.post('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.saveAdjustments);
 router.delete('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.clearAdjustments);
 router.get('/adjustments/:month/history', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.getAdjustmentHistory);

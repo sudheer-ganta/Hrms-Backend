@@ -14,9 +14,16 @@ import { payrollRunService } from './payrollRun.service.js';
 import { payrollAdjustmentService } from './payrollAdjustment.service.js';
 import { EmployeeOtAdjustment } from './payrollAdjustment.types.js';
 
-// Standard statutory overtime rate (time-and-a-half) applied when neither a
+// Default OT rate multiplier (2x, per the reference payroll sheet) applied when neither a
 // monthly OT Calculator adjustment nor a per-employee custom OT rate is set.
-const DEFAULT_OT_RATE_MULTIPLIER = 1.5;
+const DEFAULT_OT_RATE_MULTIPLIER = 2;
+
+// Sunday-working pay is (Basic + DA) / 26 x 2 per Sunday worked.
+const SUNDAY_PAY_MULTIPLIER = 2;
+
+// OT / Sunday wage math always divides the monthly wage base by 26 working days.
+const OT_WORKING_DAYS_DIVISOR = 26;
+const DEFAULT_OT_HOURS_PER_DAY = 8;
 
 // Late-arrival cutoff = configured shift start time + grace period, expressed in
 // minutes-since-midnight, so it reflects Settings instead of a hardcoded time.
@@ -158,23 +165,31 @@ class PayrollService {
       lateThresholdMinutes,
       inOutMap,
       punchesMap,
-      empAdj
+      empAdj,
+      policy.overtime?.hoursPerDay
     );
   }
 
   /**
    * Fast Batch Payroll Calculation for all employees with O(1) in-memory indexing
    */
-  public async calculateAllEmployeesPayroll(monthStr?: string): Promise<EmployeePayrollSummary[]> {
+  public async calculateAllEmployeesPayroll(
+    monthStr?: string,
+    adjustmentsOverride?: Record<string, EmployeeOtAdjustment>
+  ): Promise<EmployeePayrollSummary[]> {
     // A closed month is a locked, permanent record — never recompute it live,
     // even if attendance data for that month changes afterward.
+    // `adjustmentsOverride` is used only by the OT Calculator preview: it prices
+    // UNSAVED edits through this same engine, bypassing the cache and the closed-month
+    // snapshot, and never persists anything.
     const targetMonthKey = monthStr || format(new Date(), 'yyyy-MM');
-    const closedRun = await payrollRunService.getClosedRun(targetMonthKey);
+    const isPreview = adjustmentsOverride !== undefined;
+    const closedRun = isPreview ? null : await payrollRunService.getClosedRun(targetMonthKey);
     if (closedRun) {
       return closedRun.snapshot;
     }
 
-    const cached = this.allPayrollCache.get(targetMonthKey);
+    const cached = isPreview ? undefined : this.allPayrollCache.get(targetMonthKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
     }
@@ -196,7 +211,7 @@ class PayrollService {
     // so serializing them was paying that latency multiple times over.
     const [allProfiles, adjustments, mongoRecords] = await Promise.all([
       employeeMasterService.getAllProfiles(),
-      payrollAdjustmentService.getAdjustments(targetMonthKey),
+      isPreview ? Promise.resolve(adjustmentsOverride!) : payrollAdjustmentService.getAdjustments(targetMonthKey),
       isDbConnected
         ? Promise.all([
             InOutModel.find({ date: { $gte: dateFrom, $lte: dateTo } })
@@ -285,11 +300,14 @@ class PayrollService {
         lateThresholdMinutes,
         empInOutMap,
         empPunchesMap,
-        empAdj
+        empAdj,
+        policy.overtime?.hoursPerDay
       );
     });
 
-    this.allPayrollCache.set(targetMonthKey, { data: result, expiresAt: Date.now() + ALL_PAYROLL_CACHE_TTL_MS });
+    if (!isPreview) {
+      this.allPayrollCache.set(targetMonthKey, { data: result, expiresAt: Date.now() + ALL_PAYROLL_CACHE_TTL_MS });
+    }
     return result;
   }
 
@@ -311,7 +329,8 @@ class PayrollService {
     lateThresholdMinutes: number,
     inOutByDate: Map<string, any>,
     punchesByDate: Map<string, any[]>,
-    adjustment?: EmployeeOtAdjustment
+    adjustment?: EmployeeOtAdjustment,
+    otHoursPerDay: number = DEFAULT_OT_HOURS_PER_DAY
   ): EmployeePayrollSummary {
     let presentDays = 0;
     let halfDays = 0;
@@ -456,8 +475,12 @@ class PayrollService {
     const grossSalary = hasSalarySet ? (profile.grossSalary || (basicSalary + hra + specialAllowance)) : 0;
     const totalNetSalary = hasSalarySet ? Math.max(0, grossSalary - pfDeduction - esiDeduction) : 0;
 
-    const standardHourlyWage = hasSalarySet ? monthlyCtc / (26 * standardDayHours) : 0;
-    
+    // OT wage base = Basic + DA (NOT CTC/gross). Hourly = base / 26 / OT hours-per-day (global policy).
+    const da = hasSalarySet ? Number(profile.da) || 0 : 0;
+    const otWageBase = basicSalary + da;
+    const safeOtHoursPerDay = otHoursPerDay > 0 ? otHoursPerDay : DEFAULT_OT_HOURS_PER_DAY;
+    const standardHourlyWage = hasSalarySet ? otWageBase / OT_WORKING_DAYS_DIVISOR / safeOtHoursPerDay : 0;
+
     // Determine effective multiplier and rate
     let effectiveMultiplier = otRateMultiplier;
     if (adjustment?.multiplier !== undefined && adjustment.multiplier > 0) {
@@ -467,12 +490,23 @@ class PayrollService {
       effectiveMultiplier = profile.otRatePerHour;
     }
 
-    let otRatePerHour = Math.round(standardHourlyWage * effectiveMultiplier * 100) / 100;
+    // Kept unrounded: the reference sheet applies no rounding to the rate or the OT line.
+    let exactOtRate = standardHourlyWage * effectiveMultiplier;
     if (profile.otRatePerHour && profile.otRatePerHour > 10 && adjustment?.multiplier === undefined) {
       // Absolute custom rupee rate per hour (if > 10)
-      otRatePerHour = profile.otRatePerHour;
+      exactOtRate = profile.otRatePerHour;
     }
-    const otEarnings = (profile.otEligible && hasSalarySet) ? Math.round(totalOtHours * otRatePerHour) : 0;
+    const otRatePerHour = Math.round(exactOtRate * 100) / 100; // display value only
+    const otHourlyWage = Math.round(standardHourlyWage * 100) / 100; // base hourly wage (before multiplier), display only
+    const otDailyWage = hasSalarySet ? Math.round((otWageBase / OT_WORKING_DAYS_DIVISOR) * 100) / 100 : 0;
+    // Paise precision; whole-rupee rounding happens once, on gross (as in the reference sheet).
+    const otEarnings = (profile.otEligible && hasSalarySet) ? Math.round(totalOtHours * exactOtRate * 100) / 100 : 0;
+
+    // Sunday working: (Basic + DA) / 26 x 2 x Sunday days (fractional days preserved)
+    const sundayDays = adjustment?.sundayDays !== undefined && adjustment.sundayDays >= 0 ? adjustment.sundayDays : 0;
+    const sundayEarnings = (profile.otEligible && hasSalarySet)
+      ? Math.round((otWageBase / OT_WORKING_DAYS_DIVISOR) * SUNDAY_PAY_MULTIPLIER * sundayDays * 100) / 100
+      : 0;
 
     const dailyWage = hasSalarySet ? grossSalary / totalMonthDays : 0;
     const lopDeduction = Math.round(lopDays * dailyWage);
@@ -481,8 +515,8 @@ class PayrollService {
 
     // Live Month-to-Date (MTD) Accrued Earnings (scaled dynamically to elapsed days)
     const elapsedEarnings = hasSalarySet ? Math.round(dailyWage * elapsedDays) : 0;
-    const grossEarnings = elapsedEarnings + otEarnings;
-    const netPayable = hasSalarySet ? Math.max(0, elapsedEarnings - totalDeductions + otEarnings) : 0;
+    const grossEarnings = Math.round(elapsedEarnings + otEarnings + sundayEarnings);
+    const netPayable = hasSalarySet ? Math.max(0, Math.round(elapsedEarnings - totalDeductions + otEarnings + sundayEarnings)) : 0;
     const netPayableWords = hasSalarySet ? numberToWordsIndian(netPayable) : 'Salary Not Configured';
 
     return {
@@ -515,8 +549,17 @@ class PayrollService {
       grossSalary,
       employerPf,
       employerEsic,
+      da,
+      otWageBase,
+      otDailyWage,
+      otHourlyWage,
+      otHoursPerDay: safeOtHoursPerDay,
+      otEligible: Boolean(profile.otEligible),
+      otMultiplier: effectiveMultiplier,
       otRatePerHour,
       otEarnings,
+      sundayDays,
+      sundayEarnings,
       grossEarnings,
       lopDeduction,
       pfDeduction,

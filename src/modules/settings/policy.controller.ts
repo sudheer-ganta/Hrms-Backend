@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { policyService } from './policy.service.js';
+import { payrollService } from '../payroll/payroll.service.js';
 
 export class PolicyController {
   public static getSettings(req: Request, res: Response): void {
@@ -14,6 +15,8 @@ export class PolicyController {
   public static async updateSettings(req: Request, res: Response): Promise<void> {
     try {
       const updated = await policyService.updateSettings(req.body);
+      // OT hours/day, shift and holiday policy feed payroll: don't serve the cached snapshot.
+      payrollService.invalidateAllPayrollCache();
       res.json({ success: true, data: updated, message: 'Policy settings updated successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to update settings' });
@@ -28,6 +31,7 @@ export class PolicyController {
         return;
       }
       const holiday = await policyService.addHoliday({ date, name, type: type || 'NATIONAL' });
+      payrollService.invalidateAllPayrollCache();
       res.json({ success: true, data: holiday, message: 'Holiday added successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to add holiday' });
@@ -38,6 +42,7 @@ export class PolicyController {
     try {
       const id = req.params.id as string;
       await policyService.removeHoliday(id);
+      payrollService.invalidateAllPayrollCache();
       res.json({ success: true, message: 'Holiday removed successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to remove holiday' });

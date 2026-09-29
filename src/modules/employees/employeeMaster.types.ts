@@ -21,9 +21,11 @@ export interface EmployeeProfile {
   monthlyCtc?: number; // Total Gross CTC (L) PM (e.g. 30,000)
   annualCtc?: number; // Total Gross CTC (L) PA (e.g. 360,000)
   basicSalary?: number; // Basic (A) PM (e.g. 15,000)
+  da?: number; // Dearness Allowance PM — used only as part of the OT wage base (Basic + DA)
   fixedSalary?: number; // Fixed Salary (B) PM (e.g. 15,000)
   hra?: number; // HRA (C1) PM (e.g. 6,000)
   specialAllowance?: number; // Special Allowance (C2) PM (e.g. 7,000)
+  otherAllowance?: number; // Others / Other Allowance PM — part of Gross
   allowances?: number; // Optional allowances total
   grossSalary?: number; // Gross Salary (D) PM (e.g. 28,000)
   employeePf?: number; // Employee PF (E) PM (e.g. 1,800)
@@ -69,9 +71,11 @@ export interface EmployeeProfileUpdateInput {
   monthlyCtc?: number;
   annualCtc?: number;
   basicSalary?: number;
+  da?: number;
   fixedSalary?: number;
   hra?: number;
   specialAllowance?: number;
+  otherAllowance?: number;
   grossSalary?: number;
   employeePf?: number;
   employeeEsic?: number;

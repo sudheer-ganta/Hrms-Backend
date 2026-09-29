@@ -40,6 +40,18 @@ export class PayrollController {
     }
   };
 
+  // Prices UNSAVED OT Calculator edits through the real payroll engine. Read-only: nothing is persisted.
+  public previewPayroll = async (req: Request, res: Response) => {
+    try {
+      const month = req.params.month as string;
+      const adjustments = req.body?.adjustments || {};
+      const data = await payrollService.calculateAllEmployeesPayroll(month, adjustments);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+
   public saveAdjustments = async (req: AuthRequest, res: Response) => {
     try {
       const month = req.params.month as string;

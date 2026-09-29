@@ -30,8 +30,17 @@ export interface EmployeePayrollSummary {
   hra: number;
   allowances: number;
   grossSalary?: number; // Gross Monthly Salary (D) = Basic + HRA + Special Allowance
+  da?: number; // Dearness Allowance (OT wage base component only)
+  otWageBase?: number; // Basic + DA — base for OT and Sunday pay
+  otDailyWage?: number; // otWageBase / 26 (display)
+  otHourlyWage?: number; // otWageBase / 26 / hoursPerDay (display, before multiplier)
+  otHoursPerDay?: number; // Global OT policy standard hours/day (default 8)
+  otEligible?: boolean;
+  otMultiplier?: number; // Effective OT multiplier applied
   otRatePerHour: number;
   otEarnings: number; // Calculated Overtime pay
+  sundayDays?: number; // Sundays worked (fractional allowed)
+  sundayEarnings?: number; // (Basic + DA) / 26 x 2 x sundayDays
   grossEarnings: number; // Basic + HRA + Allowances + OT
 
   // Statutory & Company Contributions (₹)

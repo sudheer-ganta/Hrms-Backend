@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: HRMSPolicySettings = {
   },
   overtime: {
     enabled: true,
+    hoursPerDay: 8,
   },
   leaves: {
     casualLeave: 12,
@@ -62,7 +63,10 @@ function mergeWithDefaults(doc: any): HRMSPolicySettings {
     holidays: clean.holidays ?? DEFAULT_SETTINGS.holidays,
     updatedAt: clean.updatedAt ?? DEFAULT_SETTINGS.updatedAt,
     shift: { ...DEFAULT_SETTINGS.shift, ...(clean.shift || {}) },
-    overtime: { enabled: clean.overtime?.enabled ?? DEFAULT_SETTINGS.overtime.enabled },
+    overtime: {
+      enabled: clean.overtime?.enabled ?? DEFAULT_SETTINGS.overtime.enabled,
+      hoursPerDay: clean.overtime?.hoursPerDay > 0 ? clean.overtime.hoursPerDay : DEFAULT_SETTINGS.overtime.hoursPerDay,
+    },
     leaves: { ...DEFAULT_SETTINGS.leaves, ...(clean.leaves || {}) },
     scheduler: { ...DEFAULT_SETTINGS.scheduler, ...(clean.scheduler || {}) },
   };

@@ -11,6 +11,7 @@ export interface ShiftConfig {
 
 export interface OvertimeConfig {
   enabled: boolean;
+  hoursPerDay: number; // Global standard hours/day used as the OT hourly-wage divisor (default 8)
 }
 
 export interface CompanyHoliday {

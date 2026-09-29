@@ -25,6 +25,7 @@ const PolicySchema = new Schema<PolicyDocument>(
     },
     overtime: {
       enabled: { type: Boolean, default: true },
+      hoursPerDay: { type: Number, default: 8 },
     },
     leaves: {
       casualLeave: { type: Number, default: 12 },

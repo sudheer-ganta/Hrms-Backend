@@ -8,7 +8,7 @@ interface StorageData {
   records: IAttendanceRecord[];
   inOutRecords: IInOutRecord[];
   syncLogs: (ISyncLog & { _id: string })[];
-  adjustments: Record<string, Record<string, { otHours?: number; totalWorkHours?: number; multiplier?: number }>>;
+  adjustments: Record<string, Record<string, { otHours?: number; totalWorkHours?: number; multiplier?: number; sundayDays?: number }>>;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
