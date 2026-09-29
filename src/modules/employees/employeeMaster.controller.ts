@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { employeeMasterService } from './employeeMaster.service.js';
+import { payrollService } from '../payroll/payroll.service.js';
 
 export class EmployeeMasterController {
   public getAllProfiles = async (req: Request, res: Response) => {
@@ -32,6 +33,9 @@ export class EmployeeMasterController {
     try {
       const empCode = req.params.empCode as string;
       const updated = await employeeMasterService.updateProfile(empCode, req.body);
+      // A salary/CTC/OT-rate change should be reflected immediately, not after
+      // the cache's safety-net TTL expires.
+      payrollService.invalidateAllPayrollCache();
       res.json({
         success: true,
         message: `Employee ${empCode} profile updated successfully`,

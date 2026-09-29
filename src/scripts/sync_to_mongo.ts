@@ -56,7 +56,7 @@ async function runSync() {
   }
 
   // 3. Sync Employee Requests
-  const requestsFile = path.join(DATA_DIR, 'employee_requests.json');
+  const requestsFile = path.join(DATA_DIR, 'requests_store.json');
   if (fs.existsSync(requestsFile)) {
     const requests = JSON.parse(fs.readFileSync(requestsFile, 'utf-8'));
     const reqOps = requests.map((r: any) => ({
@@ -73,8 +73,12 @@ async function runSync() {
   }
 
   // 4. Sync from attendance_store.json (In-Out Summaries and Raw Punches)
+  // Skipped by default: attendance/InOut data already dual-writes to MongoDB
+  // during normal sync operation, so this one-off migration only needs to
+  // cover the modules that were previously local-file-only (employees,
+  // policy, requests). Set INCLUDE_ATTENDANCE=true to also backfill this.
   const attStoreFile = path.join(DATA_DIR, 'attendance_store.json');
-  if (fs.existsSync(attStoreFile)) {
+  if (process.env.INCLUDE_ATTENDANCE === 'true' && fs.existsSync(attStoreFile)) {
     console.log('📦 Reading attendance store...');
     const attData = JSON.parse(fs.readFileSync(attStoreFile, 'utf-8'));
 

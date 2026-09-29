@@ -196,7 +196,7 @@ export class SyncController {
       const updatedEnabled = enabled !== undefined ? Boolean(enabled) : !current.scheduler.enabled;
       const updatedInterval = intervalMinutes ? Math.max(1, Number(intervalMinutes)) : current.scheduler.intervalMinutes;
 
-      policyService.updateSettings({
+      await policyService.updateSettings({
         scheduler: {
           enabled: updatedEnabled,
           intervalMinutes: updatedInterval,

@@ -177,11 +177,17 @@ export class PunchService {
     const { isoDate, timeStr, fullTimeStr, timestamp } = this.getServerISTNow();
     const cleanCode = input.empCode.trim().toUpperCase();
 
-    // 1. Resolve employee name
+    // 1. Resolve employee name — a brief DB hiccup shouldn't block check-in/out,
+    // so fall back to a generic label rather than let a lookup failure here
+    // fail the whole punch.
     let empName = input.empName?.trim();
     if (!empName) {
-      const profile = await employeeMasterService.getProfile(cleanCode);
-      empName = profile?.name || `Employee ${cleanCode}`;
+      try {
+        const profile = await employeeMasterService.getProfile(cleanCode);
+        empName = profile?.name || `Employee ${cleanCode}`;
+      } catch {
+        empName = `Employee ${cleanCode}`;
+      }
     }
 
     // 2. Resolve Geolocation Tag

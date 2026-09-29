@@ -59,6 +59,7 @@ export class PayrollRunController {
       const reopenedBy = req.user?.name || req.user?.email || 'Unknown';
 
       const run = await payrollRunService.reopenMonth(month, reopenedBy);
+      payrollService.invalidateAllPayrollCache(month);
 
       res.json({
         success: true,

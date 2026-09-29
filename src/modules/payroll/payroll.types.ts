@@ -11,7 +11,8 @@ export interface EmployeePayrollSummary {
   
   // Attendance & Time Breakdown
   month: string; // YYYY-MM
-  monthDays: number;
+  monthDays: number; // Total calendar days in the target month (e.g. 30 for September)
+  elapsedDays: number; // Days elapsed so far this month (equals monthDays for a past/closed month)
   presentDays: number;
   halfDays: number;
   absentDays: number;

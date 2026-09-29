@@ -4,6 +4,26 @@ import { ENV } from './env.js';
 let isConnected = false;
 let isConnecting = false;
 let listenersAttached = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+const RECONNECT_INTERVAL_MS = 5000;
+
+// Once the initial connection drops, mongoose's own driver-level reconnection
+// isn't reliably recovering it in this environment (observed connections
+// staying down indefinitely after a "secureConnect" timeout). This schedules
+// an explicit application-level retry instead of waiting on that.
+const scheduleReconnect = (): void => {
+  if (reconnectTimer) return; // a retry is already pending
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    if (mongoose.connection.readyState === 1) return; // recovered on its own meanwhile
+    console.log('🔄 Retrying MongoDB connection...');
+    const ok = await connectDatabase();
+    if (!ok) {
+      scheduleReconnect();
+    }
+  }, RECONNECT_INTERVAL_MS);
+};
 
 const attachEventListeners = (): void => {
   if (listenersAttached) return;
@@ -19,12 +39,14 @@ const attachEventListeners = (): void => {
     console.error('❌ MongoDB Connection Error:', err.message);
     isConnected = false;
     isConnecting = false;
+    scheduleReconnect();
   });
 
   mongoose.connection.on('disconnected', () => {
-    console.warn('⚠️ MongoDB Disconnected. Driver will auto-reconnect...');
+    console.warn('⚠️ MongoDB Disconnected. Scheduling automatic reconnect...');
     isConnected = false;
     isConnecting = false;
+    scheduleReconnect();
   });
 
   mongoose.connection.on('reconnected', () => {
@@ -70,6 +92,7 @@ export const connectDatabase = async (): Promise<boolean> => {
     isConnecting = false;
     isConnected = false;
     console.error(`❌ MongoDB connection failed: ${error?.message || error}`);
+    scheduleReconnect();
     return false;
   }
 };
@@ -80,4 +103,3 @@ export const getDbStatus = (): { connected: boolean; uri: string } => {
     uri: ENV.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'),
   };
 };
-

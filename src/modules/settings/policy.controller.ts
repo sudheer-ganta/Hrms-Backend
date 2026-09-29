@@ -11,33 +11,33 @@ export class PolicyController {
     }
   }
 
-  public static updateSettings(req: Request, res: Response): void {
+  public static async updateSettings(req: Request, res: Response): Promise<void> {
     try {
-      const updated = policyService.updateSettings(req.body);
+      const updated = await policyService.updateSettings(req.body);
       res.json({ success: true, data: updated, message: 'Policy settings updated successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to update settings' });
     }
   }
 
-  public static addHoliday(req: Request, res: Response): void {
+  public static async addHoliday(req: Request, res: Response): Promise<void> {
     try {
       const { date, name, type } = req.body;
       if (!date || !name) {
         res.status(400).json({ success: false, error: 'Date and holiday name are required' });
         return;
       }
-      const holiday = policyService.addHoliday({ date, name, type: type || 'NATIONAL' });
+      const holiday = await policyService.addHoliday({ date, name, type: type || 'NATIONAL' });
       res.json({ success: true, data: holiday, message: 'Holiday added successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to add holiday' });
     }
   }
 
-  public static removeHoliday(req: Request, res: Response): void {
+  public static async removeHoliday(req: Request, res: Response): Promise<void> {
     try {
       const id = req.params.id as string;
-      policyService.removeHoliday(id);
+      await policyService.removeHoliday(id);
       res.json({ success: true, message: 'Holiday removed successfully' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Failed to remove holiday' });

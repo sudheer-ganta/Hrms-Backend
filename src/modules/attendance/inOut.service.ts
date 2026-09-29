@@ -154,10 +154,10 @@ export class InOutService {
           },
         }));
         await InOutModel.bulkWrite(bulkOps, { ordered: false });
+      } else {
+        // Only fall back to the local file when Mongo is genuinely unreachable
+        localStore.upsertInOutRecords(normalizedDocs);
       }
-
-      // Always save to fallback localStore
-      localStore.upsertInOutRecords(normalizedDocs);
 
       const durationMs = Date.now() - startTime;
 
@@ -502,8 +502,12 @@ export class InOutService {
           })),
           { ordered: false }
         ).catch((e) => console.warn('[InOutService] Async bulkWrite error:', e.message));
+      } else {
+        // Only fall back to the local file when Mongo is genuinely unreachable —
+        // this used to run unconditionally on every read, rewriting a
+        // multi-megabyte JSON file on disk for every attendance list request.
+        localStore.upsertInOutRecords(updatesToPersist as any);
       }
-      localStore.upsertInOutRecords(updatesToPersist as any);
     }
 
     return records;

@@ -9,9 +9,14 @@ import { EmployeeProfile } from '../employees/employeeMaster.types.js';
 import { InOutModel } from '../attendance/inOut.model.js';
 import { AttendanceModel } from '../attendance/attendance.model.js';
 import { HRMSPolicySettings } from '../settings/policy.types.js';
+import { getShiftStandardHours } from '../settings/policy.service.js';
 import { payrollRunService } from './payrollRun.service.js';
 import { payrollAdjustmentService } from './payrollAdjustment.service.js';
 import { EmployeeOtAdjustment } from './payrollAdjustment.types.js';
+
+// Standard statutory overtime rate (time-and-a-half) applied when neither a
+// monthly OT Calculator adjustment nor a per-employee custom OT rate is set.
+const DEFAULT_OT_RATE_MULTIPLIER = 1.5;
 
 // Late-arrival cutoff = configured shift start time + grace period, expressed in
 // minutes-since-midnight, so it reflects Settings instead of a hardcoded time.
@@ -21,7 +26,30 @@ function getLateThresholdMinutes(policy: HRMSPolicySettings): number {
   return (startHour || 9) * 60 + (startMin || 0) + graceMinutes;
 }
 
+// How long a computed "all employees" payroll snapshot stays valid before being
+// recomputed. Attendance data itself only changes as often as the biometric
+// sync scheduler runs (5 minutes by default), so serving a short-lived cached
+// result avoids paying MongoDB Atlas round-trip latency on every page visit.
+// Any adjustment save/clear or month close/reopen invalidates it immediately
+// via invalidateAllPayrollCache(), so this window is a safety-net ceiling, not
+// the normal staleness a user will see.
+const ALL_PAYROLL_CACHE_TTL_MS = 20_000;
+
 class PayrollService {
+  private allPayrollCache = new Map<string, { data: EmployeePayrollSummary[]; expiresAt: number }>();
+
+  /**
+   * Drops the cached "all employees" snapshot for a month (or every month, if
+   * none given) so the next request recomputes from live data immediately.
+   */
+  public invalidateAllPayrollCache(monthKey?: string): void {
+    if (monthKey) {
+      this.allPayrollCache.delete(monthKey);
+    } else {
+      this.allPayrollCache.clear();
+    }
+  }
+
   /**
    * Calculates monthly payroll & overtime summary for a single employee
    */
@@ -35,52 +63,64 @@ class PayrollService {
       if (locked) return locked;
     }
 
-    const profile = (await employeeMasterService.getProfile(empCode)) || {
-      empCode,
-      name: `Employee ${empCode}`,
-      otEligible: true,
-      status: 'active' as const
-    };
-
     const targetDate = monthStr ? new Date(`${monthStr}-01`) : new Date();
     const mStart = startOfMonth(targetDate);
     const mEnd = endOfMonth(targetDate);
     const formattedMonth = format(mStart, 'yyyy-MM');
     const daysInMonth = eachDayOfInterval({ start: mStart, end: mEnd });
     const totalMonthDays = daysInMonth.length;
+    const dateFrom = format(mStart, 'yyyy-MM-01');
+    const dateTo = format(mEnd, 'yyyy-MM-dd');
+
+    const isDbConnected = mongoose.connection.readyState === 1;
+
+    // These lookups are independent of each other, so run them together
+    // instead of one after another — each round trip to MongoDB Atlas costs
+    // roughly the same fixed latency regardless of how small the query is.
+    const [profileResult, adjustments, mongoRecords] = await Promise.all([
+      employeeMasterService.getProfile(empCode),
+      payrollAdjustmentService.getAdjustments(targetMonthKey),
+      isDbConnected
+        ? Promise.all([
+            InOutModel.find({ employeeCode: empCode, date: { $gte: dateFrom, $lte: dateTo } })
+              .select('employeeCode date inTime outTime workMinutes status overTime lateIn')
+              .maxTimeMS(3000)
+              .lean(),
+            AttendanceModel.find({ employeeCode: empCode, entryDate: { $gte: dateFrom, $lte: dateTo } })
+              .select('entryDate punchDateTime employeeCode')
+              .maxTimeMS(3000)
+              .lean(),
+          ]).catch((err) => {
+            console.warn('MongoDB query in calculateEmployeePayroll failed/timed out, using local store:', err);
+            return [[], []] as [any[], any[]];
+          })
+        : Promise.resolve([[], []] as [any[], any[]]),
+    ]);
+
+    const profile = profileResult || {
+      empCode,
+      name: `Employee ${empCode}`,
+      otEligible: true,
+      status: 'active' as const
+    };
+
+    let [inOutList, punchesList] = mongoRecords;
 
     // Holidays & Policies
     const policy = policyService.getSettings();
     const holidays = policy.holidays || [];
     const holidayDates = new Set(holidays.map(h => h.date));
     const weeklyOffList = policy.weeklyOffDays || ['Sunday'];
-    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    // Standard work-day length for wage-rate & OT math comes from the configured
+    // shift start/end time — NOT the attendance-marking thresholds below, which
+    // are deliberately more lenient (e.g. checkout after 6h still counts as a
+    // full day present, even on an 8.5h shift).
+    const standardDayHours = getShiftStandardHours(policy.shift);
     const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
     const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 3.0);
     const minCheckoutForFullDay = policy.shift?.minCheckoutForFullDay || '16:00';
-    const otRateMultiplier = policy.overtime?.defaultRateMultiplier || 1.5;
+    const otRateMultiplier = DEFAULT_OT_RATE_MULTIPLIER;
     const lateThresholdMinutes = getLateThresholdMinutes(policy);
-
-    const dateFrom = format(mStart, 'yyyy-MM-01');
-    const dateTo = format(mEnd, 'yyyy-MM-dd');
-
-    // Filter in-out records and raw punches for this specific month only
-    const isDbConnected = mongoose.connection.readyState === 1;
-    let inOutList: any[] = [];
-    let punchesList: any[] = [];
-
-    if (isDbConnected) {
-      try {
-        [inOutList, punchesList] = await Promise.all([
-          InOutModel.find({ employeeCode: empCode, date: { $gte: dateFrom, $lte: dateTo } }).maxTimeMS(3000).lean(),
-          AttendanceModel.find({ employeeCode: empCode, entryDate: { $gte: dateFrom, $lte: dateTo } }).select('entryDate punchDateTime employeeCode').maxTimeMS(3000).lean(),
-        ]);
-      } catch (err) {
-        console.warn('MongoDB query in calculateEmployeePayroll failed/timed out, using local store:', err);
-        inOutList = [];
-        punchesList = [];
-      }
-    }
 
     if (inOutList.length === 0 && punchesList.length === 0) {
       inOutList = localStore.getInOutRecords().filter(r => r.employeeCode === empCode && r.date >= dateFrom && r.date <= dateTo);
@@ -101,7 +141,6 @@ class PayrollService {
       }
     }
 
-    const adjustments = await payrollAdjustmentService.getAdjustments(targetMonthKey);
     const empAdj = adjustments[empCode];
 
     return this.computeSingleEmployee(
@@ -135,9 +174,10 @@ class PayrollService {
       return closedRun.snapshot;
     }
 
-    const allProfiles = await employeeMasterService.getAllProfiles();
-    const adjustments = await payrollAdjustmentService.getAdjustments(targetMonthKey);
-    const isDbConnected = mongoose.connection.readyState === 1;
+    const cached = this.allPayrollCache.get(targetMonthKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
 
     const targetDate = monthStr ? new Date(`${monthStr}-01`) : new Date();
     const mStart = startOfMonth(targetDate);
@@ -148,34 +188,45 @@ class PayrollService {
     const dateFrom = format(mStart, 'yyyy-MM-01');
     const dateTo = format(mEnd, 'yyyy-MM-dd');
 
+    const isDbConnected = mongoose.connection.readyState === 1;
+
+    // These three lookups are independent of each other, so run them together
+    // instead of one after another — each round trip to MongoDB Atlas costs
+    // roughly the same fixed latency regardless of how small the query is,
+    // so serializing them was paying that latency multiple times over.
+    const [allProfiles, adjustments, mongoRecords] = await Promise.all([
+      employeeMasterService.getAllProfiles(),
+      payrollAdjustmentService.getAdjustments(targetMonthKey),
+      isDbConnected
+        ? Promise.all([
+            InOutModel.find({ date: { $gte: dateFrom, $lte: dateTo } })
+              .select('employeeCode date inTime outTime workMinutes status overTime lateIn')
+              .maxTimeMS(4000)
+              .lean(),
+            AttendanceModel.find({ entryDate: { $gte: dateFrom, $lte: dateTo } })
+              .select('employeeCode entryDate punchDateTime')
+              .maxTimeMS(4000)
+              .lean(),
+          ]).catch((err) => {
+            console.warn('MongoDB query in calculateAllEmployeesPayroll failed/timed out, using local store:', err);
+            return [[], []] as [any[], any[]];
+          })
+        : Promise.resolve([[], []] as [any[], any[]]),
+    ]);
+
+    let [allInOut, allPunches] = mongoRecords;
+
     // Load policy ONCE
     const policy = policyService.getSettings();
     const holidays = policy.holidays || [];
     const holidayDates = new Set(holidays.map(h => h.date));
     const weeklyOffList = policy.weeklyOffDays || ['Sunday'];
-    const standardDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
+    const standardDayHours = getShiftStandardHours(policy.shift);
     const minFullDayHours = (policy.shift?.fullDayThresholdMinutes ? policy.shift.fullDayThresholdMinutes / 60 : 6.0);
     const minHalfDayHours = (policy.shift?.halfDayThresholdMinutes ? policy.shift.halfDayThresholdMinutes / 60 : 3.0);
     const minCheckoutForFullDay = policy.shift?.minCheckoutForFullDay || '16:00';
-    const otRateMultiplier = policy.overtime?.defaultRateMultiplier || 1.5;
+    const otRateMultiplier = DEFAULT_OT_RATE_MULTIPLIER;
     const lateThresholdMinutes = getLateThresholdMinutes(policy);
-
-    // Fetch ONLY the target month records with projection for extreme speed
-    let allInOut: any[] = [];
-    let allPunches: any[] = [];
-
-    if (isDbConnected) {
-      try {
-        [allInOut, allPunches] = await Promise.all([
-          InOutModel.find({ date: { $gte: dateFrom, $lte: dateTo } }).maxTimeMS(4000).lean(),
-          AttendanceModel.find({ entryDate: { $gte: dateFrom, $lte: dateTo } }).select('employeeCode entryDate punchDateTime').maxTimeMS(4000).lean(),
-        ]);
-      } catch (err) {
-        console.warn('MongoDB query in calculateAllEmployeesPayroll failed/timed out, using local store:', err);
-        allInOut = [];
-        allPunches = [];
-      }
-    }
 
     if (allInOut.length === 0 && allPunches.length === 0) {
       allInOut = localStore.getInOutRecords().filter(r => r.date >= dateFrom && r.date <= dateTo);
@@ -214,8 +265,7 @@ class PayrollService {
     const emptyInOutMap = new Map<string, any>();
     const emptyPunchesMap = new Map<string, any>();
 
-    // Instant O(1) computation loop
-    return allProfiles.map((profile) => {
+    const result = allProfiles.map((profile) => {
       const empInOutMap = inOutIndex.get(profile.empCode) || emptyInOutMap;
       const empPunchesMap = punchesIndex.get(profile.empCode) || emptyPunchesMap;
       const empAdj = adjustments[profile.empCode];
@@ -238,6 +288,9 @@ class PayrollService {
         empAdj
       );
     });
+
+    this.allPayrollCache.set(targetMonthKey, { data: result, expiresAt: Date.now() + ALL_PAYROLL_CACHE_TTL_MS });
+    return result;
   }
 
   /**
@@ -311,7 +364,9 @@ class PayrollService {
         } else if (ioRec.status === 'P/2' || ioRec.status === 'HALF' || workMin >= (minHalfDayHours * 60)) {
           halfDays++;
         } else {
-          presentDays++;
+          // Explicit vendor "Absent" status, or a record with no recognized
+          // status and insufficient worked minutes — an unexplained absence.
+          absentDays++;
         }
 
         const hrs = (ioRec.workMinutes || (isSingleSwipe ? standardDayHours * 60 : 0)) / 60;
@@ -357,13 +412,14 @@ class PayrollService {
           lateArrivals++;
         }
       } else if (dayPunches.length === 1) {
-        // Single swipe recorded: credit as payable day (0 LOP)
+        // Single swipe recorded (e.g. forgot to punch out): credit as present,
+        // there is direct evidence the employee was at work that day.
         presentDays++;
         totalWorkHours += standardDayHours;
       } else {
-        // Unrecorded / missed swipes are covered (0 Loss of Pay)
-        presentDays++;
-        totalWorkHours += standardDayHours;
+        // No InOut record and no raw punches at all for a working day — an
+        // unexplained absence, deducted as Loss of Pay below.
+        absentDays++;
       }
     }
 
@@ -380,9 +436,10 @@ class PayrollService {
       }
     }
 
-    // Month-to-Date (MTD) Payable Days Math (100% Paid, 0 LOP)
-    const payableDays = elapsedDays;
-    const lopDays = 0;
+    // Month-to-Date (MTD) Payable Days Math — absences deduct Loss of Pay;
+    // present/half-day/holiday/weekly-off days remain fully paid.
+    const lopDays = absentDays;
+    const payableDays = Math.max(0, elapsedDays - lopDays);
 
     // Compensation & Salary Engine (Annexure K Breakdown)
     const hasSalarySet = profile.monthlyCtc !== undefined && profile.monthlyCtc !== null && Number(profile.monthlyCtc) > 0;
@@ -439,7 +496,8 @@ class PayrollService {
       designation: profile.designation || 'Staff',
       location: profile.location || 'Budigere',
       month: formattedMonth,
-      monthDays: elapsedDays || totalMonthDays,
+      monthDays: totalMonthDays,
+      elapsedDays,
       presentDays,
       halfDays,
       absentDays,

@@ -1,55 +1,24 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
+import { EmployeeModel } from './employeeMaster.model.js';
 import { EmployeeProfile, EmployeeProfileUpdateInput } from './employeeMaster.types.js';
-import { localStore } from '../../config/localStore.js';
 import { InOutModel } from '../attendance/inOut.model.js';
 import { AttendanceModel } from '../attendance/attendance.model.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../../../data');
-const PROFILES_FILE = path.join(DATA_DIR, 'employee_profiles.json');
+function toProfile(doc: any): EmployeeProfile {
+  const { _id, __v, createdAt, updatedAt, ...rest } = doc;
+  return {
+    ...rest,
+    updatedAt: rest.updatedAt || (updatedAt ? new Date(updatedAt).toISOString() : undefined),
+  } as EmployeeProfile;
+}
 
 class EmployeeMasterService {
-  private profilesMap: Map<string, EmployeeProfile> = new Map();
   private lastDiscoveryTime = 0;
   private static readonly DISCOVERY_INTERVAL_MS = 60 * 1000; // at most once every 60s
 
-  constructor() {
-    this.ensureDataDir();
-    this.loadProfiles();
-  }
-
-  private ensureDataDir(): void {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-  }
-
-  private loadProfiles(): void {
-    try {
-      if (fs.existsSync(PROFILES_FILE)) {
-        const raw = fs.readFileSync(PROFILES_FILE, 'utf-8');
-        const list: EmployeeProfile[] = JSON.parse(raw);
-        this.profilesMap.clear();
-        for (const p of list) {
-          this.profilesMap.set(p.empCode, p);
-        }
-      }
-    } catch (err) {
-      console.warn('[EmployeeMasterService] Error reading employee_profiles.json:', err);
-    }
-  }
-
-  private saveProfiles(): void {
-    try {
-      this.ensureDataDir();
-      const list = Array.from(this.profilesMap.values());
-      fs.writeFileSync(PROFILES_FILE, JSON.stringify(list, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[EmployeeMasterService] Failed to save profiles:', err);
+  private assertDbConnected(): void {
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('Employee master data requires an active database connection. Please try again shortly.');
     }
   }
 
@@ -57,146 +26,127 @@ class EmployeeMasterService {
    * Returns all employee profiles, automatically populating new biometric employees
    */
   public async getAllProfiles(): Promise<EmployeeProfile[]> {
-    this.loadProfiles();
+    this.assertDbConnected();
+    await this.discoverNewEmployees();
+    const docs = await EmployeeModel.find({}).lean();
+    return docs.map(toProfile);
+  }
 
+  /**
+   * Scans recent biometric data for employee codes with no master profile yet,
+   * and creates a baseline profile for each so they show up across the app.
+   */
+  private async discoverNewEmployees(): Promise<void> {
     const now = Date.now();
-    // Fast return if profiles are already loaded and discovery ran recently
-    if (this.profilesMap.size > 0 && now - this.lastDiscoveryTime < EmployeeMasterService.DISCOVERY_INTERVAL_MS) {
-      return Array.from(this.profilesMap.values());
-    }
+    if (now - this.lastDiscoveryTime < EmployeeMasterService.DISCOVERY_INTERVAL_MS) return;
     this.lastDiscoveryTime = now;
 
-    const isDbConnected = mongoose.connection.readyState === 1;
     let inOutRecords: any[] = [];
     let rawRecords: any[] = [];
-
-    if (isDbConnected) {
-      try {
-        [inOutRecords, rawRecords] = await Promise.all([
-          InOutModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
-          AttendanceModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
-        ]);
-      } catch {
-        inOutRecords = [];
-        rawRecords = [];
-      }
+    try {
+      [inOutRecords, rawRecords] = await Promise.all([
+        InOutModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
+        AttendanceModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
+      ]);
+    } catch {
+      return;
     }
 
-    if (inOutRecords.length === 0 && rawRecords.length === 0) {
-      inOutRecords = localStore.getInOutRecords().slice(0, 500);
-      rawRecords = localStore.getRecords().slice(0, 500);
-    }
     const enrolledMap = new Map<string, { name: string; location: string }>();
-
     for (const r of inOutRecords) {
       if (r.employeeCode && !enrolledMap.has(r.employeeCode)) {
         enrolledMap.set(r.employeeCode, {
           name: r.employeeName || `Employee ${r.employeeCode}`,
-          location: r.sourceId || 'Budigere'
+          location: r.sourceId || 'Budigere',
         });
       }
     }
-
     for (const p of rawRecords) {
       if (p.employeeCode && !enrolledMap.has(p.employeeCode)) {
         enrolledMap.set(p.employeeCode, {
           name: p.employeeName || `Employee ${p.employeeCode}`,
-          location: p.sourceId || 'Budigere'
+          location: p.sourceId || 'Budigere',
         });
       }
     }
 
-    // Ensure each enrolled employee has a baseline profile
-    let changed = false;
-    for (const [code, info] of enrolledMap.entries()) {
-      if (!this.profilesMap.has(code)) {
-        const newProfile: EmployeeProfile = {
-          empCode: code,
-          name: info.name,
-          location: info.location,
-          otEligible: true,
-          status: 'active',
-          updatedAt: new Date().toISOString()
-        };
-        this.profilesMap.set(code, newProfile);
-        changed = true;
-      }
-    }
+    if (enrolledMap.size === 0) return;
 
-    if (changed) {
-      this.saveProfiles();
-    }
+    const existingCodes = new Set(
+      (await EmployeeModel.find({}, { empCode: 1 }).lean()).map((d: any) => d.empCode)
+    );
 
-    return Array.from(this.profilesMap.values());
+    const newDocs = Array.from(enrolledMap.entries())
+      .filter(([code]) => !existingCodes.has(code))
+      .map(([code, info]) => ({
+        empCode: code,
+        name: info.name,
+        location: info.location,
+        otEligible: true,
+        status: 'active' as const,
+        updatedAt: new Date().toISOString(),
+      }));
+
+    if (newDocs.length > 0) {
+      await EmployeeModel.insertMany(newDocs, { ordered: false }).catch((err) => {
+        console.warn('[EmployeeMasterService] Could not insert newly discovered employees:', err.message);
+      });
+    }
   }
 
   /**
-   * Get single employee profile by code
+   * Get single employee profile by code. Auto-provisions a baseline profile
+   * the first time a known biometric employee is looked up.
    */
   public async getProfile(empCode: string): Promise<EmployeeProfile | null> {
-    if (this.profilesMap.has(empCode)) {
-      return this.profilesMap.get(empCode)!;
-    }
+    this.assertDbConnected();
 
-    const isDbConnected = mongoose.connection.readyState === 1;
+    const existing = await EmployeeModel.findOne({ empCode }).lean();
+    if (existing) return toProfile(existing);
 
-    // Check if employee exists in in-out data or raw punches
-    const inOut = isDbConnected
-      ? await InOutModel.findOne({ employeeCode: empCode }).lean()
-      : localStore.getInOutRecords().find(r => r.employeeCode === empCode);
-    if (inOut) {
-      const newProfile: EmployeeProfile = {
-        empCode: inOut.employeeCode,
-        name: inOut.employeeName || `Employee ${inOut.employeeCode}`,
-        location: inOut.sourceId || 'Budigere',
-        otEligible: true,
-        status: 'active',
-        updatedAt: new Date().toISOString()
-      };
-      this.profilesMap.set(empCode, newProfile);
-      this.saveProfiles();
-      return newProfile;
-    }
+    const inOut = await InOutModel.findOne({ employeeCode: empCode }).lean();
+    const raw = inOut ? null : await AttendanceModel.findOne({ employeeCode: empCode }).lean();
+    const source: any = inOut || raw;
+    if (!source) return null;
 
-    const raw = isDbConnected
-      ? await AttendanceModel.findOne({ employeeCode: empCode }).lean()
-      : localStore.getRecords().find(p => p.employeeCode === empCode);
-    if (raw) {
-      const newProfile: EmployeeProfile = {
-        empCode: raw.employeeCode,
-        name: raw.employeeName || `Employee ${raw.employeeCode}`,
-        location: raw.sourceId || 'Budigere',
-        otEligible: true,
-        status: 'active',
-        updatedAt: new Date().toISOString()
-      };
-      this.profilesMap.set(empCode, newProfile);
-      this.saveProfiles();
-      return newProfile;
-    }
+    const created = await EmployeeModel.findOneAndUpdate(
+      { empCode },
+      {
+        $setOnInsert: {
+          empCode,
+          name: source.employeeName || `Employee ${empCode}`,
+          location: source.sourceId || 'Budigere',
+          otEligible: true,
+          status: 'active',
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      { upsert: true, new: true }
+    ).lean();
 
-    return null;
+    return toProfile(created);
   }
 
   /**
    * Update employee profile (DOB, Email, Monthly CTC, Annexure K Breakdown, Bank details, etc.)
    */
   public async updateProfile(empCode: string, input: EmployeeProfileUpdateInput): Promise<EmployeeProfile> {
-    let existing = await this.getProfile(empCode);
+    this.assertDbConnected();
 
+    let existing = await this.getProfile(empCode);
     if (!existing) {
       existing = {
         empCode,
         name: `Employee ${empCode}`,
         otEligible: true,
-        status: 'active'
+        status: 'active',
       };
     }
 
     const ctc = input.monthlyCtc !== undefined && input.monthlyCtc !== null && Number(input.monthlyCtc) > 0
       ? Number(input.monthlyCtc)
       : existing.monthlyCtc;
-    
+
     let basicSalary = input.basicSalary;
     let fixedSalary = input.fixedSalary;
     let hra = input.hra;
@@ -218,18 +168,18 @@ class EmployeeMasterService {
       if (employerPf === undefined) employerPf = Math.min(1800, Math.round(basicSalary * 0.12));
       if (professionalTax === undefined) professionalTax = ctc >= 15000 ? 200 : 0;
       if (employerEsic === undefined) employerEsic = ctc <= 21000 ? Math.round(ctc * 0.0325) : 0;
-      
+
       if (employeePf === undefined) employeePf = employerPf;
       if (employeeEsic === undefined) employeeEsic = ctc <= 21000 ? Math.round(ctc * 0.0075) : 0;
-      
+
       if (grossSalary === undefined) {
         grossSalary = ctc - employerPf - employerEsic - professionalTax;
       }
-      
+
       if (specialAllowance === undefined) {
         specialAllowance = Math.max(0, grossSalary - basicSalary - hra);
       }
-      
+
       if (totalNetSalary === undefined) {
         totalNetSalary = grossSalary - employeePf - employeeEsic;
       }
@@ -254,11 +204,10 @@ class EmployeeMasterService {
       minimumBonus,
       otEligible: input.otEligible !== undefined ? input.otEligible : existing.otEligible,
       otRatePerHour: input.otRatePerHour !== undefined ? Number(input.otRatePerHour) : existing.otRatePerHour,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
-    this.profilesMap.set(empCode, updated);
-    this.saveProfiles();
+    await EmployeeModel.findOneAndUpdate({ empCode }, { $set: updated }, { upsert: true, new: true });
     return updated;
   }
 }

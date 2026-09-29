@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../../middleware/auth.middleware.js';
 import { payrollService } from './payroll.service.js';
 import { emailService } from './email.service.js';
 import { payrollAdjustmentService } from './payrollAdjustment.service.js';
@@ -39,12 +40,13 @@ export class PayrollController {
     }
   };
 
-  public saveAdjustments = async (req: Request, res: Response) => {
+  public saveAdjustments = async (req: AuthRequest, res: Response) => {
     try {
       const month = req.params.month as string;
       const { adjustments } = req.body;
-      const user = (req as any).user?.username || (req as any).user?.email || 'Admin';
+      const user = req.user?.name || req.user?.email || 'Admin';
       const data = await payrollAdjustmentService.saveAdjustments(month, adjustments || {}, user);
+      payrollService.invalidateAllPayrollCache(month);
       res.json({
         success: true,
         message: 'Overtime adjustments saved to payroll successfully.',
@@ -55,14 +57,26 @@ export class PayrollController {
     }
   };
 
-  public clearAdjustments = async (req: Request, res: Response) => {
+  public clearAdjustments = async (req: AuthRequest, res: Response) => {
     try {
       const month = req.params.month as string;
-      await payrollAdjustmentService.clearAdjustments(month);
+      const user = req.user?.name || req.user?.email || 'Admin';
+      await payrollAdjustmentService.clearAdjustments(month, user);
+      payrollService.invalidateAllPayrollCache(month);
       res.json({
         success: true,
         message: 'Overtime adjustments cleared successfully.',
       });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+
+  public getAdjustmentHistory = async (req: Request, res: Response) => {
+    try {
+      const month = req.params.month as string;
+      const history = await payrollAdjustmentService.getAdjustmentHistory(month);
+      res.json({ success: true, data: history });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

@@ -2,12 +2,16 @@ import { createApp } from './app.js';
 import { connectDatabase } from './config/database.js';
 import { ENV } from './config/env.js';
 import { syncScheduler } from './modules/sync/syncScheduler.js';
+import { policyService } from './modules/settings/policy.service.js';
 
 const startServer = async (): Promise<void> => {
   const app = createApp();
 
   // Attempt database connection
   await connectDatabase();
+
+  // Load policy settings from MongoDB (source of truth) before anything reads them
+  await policyService.init();
 
   // Initialize background auto-sync scheduler
   syncScheduler.init();

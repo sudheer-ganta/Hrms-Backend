@@ -4,7 +4,17 @@ import { UserModel, UserDocument } from './user.model.js';
 import { AuthResponse, CreateUserInput, IUser, UserRole } from './auth.types.js';
 import { employeeMasterService } from '../employees/employeeMaster.service.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'colormyles_super_secret_jwt_key_2026';
+// No fallback on purpose: running with a hardcoded, source-visible secret
+// would let anyone with read access to this code forge a valid login token
+// for any account, including Super Admin. Fail loudly at startup instead.
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    'JWT_SECRET environment variable is not set. Generate one with:\n' +
+    '  node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"\n' +
+    'and add it to your .env file before starting the server.'
+  );
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = '7d';
 
 export class AuthService {
@@ -101,12 +111,7 @@ export class AuthService {
     }
 
     // Verify Password
-    let isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch && user.role === 'SUPER_ADMIN') {
-      if (password === 'gmsaisudheer@gmail' || password === 'gmsaisudheer@gmail.com') {
-        isMatch = true;
-      }
-    }
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
 
     if (!isMatch) {
       throw new Error('Invalid email, employee ID or password.');

@@ -25,8 +25,6 @@ const PolicySchema = new Schema<PolicyDocument>(
     },
     overtime: {
       enabled: { type: Boolean, default: true },
-      minOvertimeMinutes: { type: Number, default: 30 },
-      overtimeAfterHours: { type: Number, default: 8 },
     },
     leaves: {
       casualLeave: { type: Number, default: 12 },
@@ -40,6 +38,7 @@ const PolicySchema = new Schema<PolicyDocument>(
     },
     holidays: [
       {
+        _id: false,
         id: { type: String, required: true },
         date: { type: String, required: true },
         name: { type: String, required: true },

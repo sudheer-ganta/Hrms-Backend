@@ -11,9 +11,6 @@ export interface ShiftConfig {
 
 export interface OvertimeConfig {
   enabled: boolean;
-  minOvertimeMinutes: number; // 30
-  overtimeAfterHours: number; // 8
-  defaultRateMultiplier: number; // 1.5 = time-and-a-half. Per-employee otRatePerHour overrides this.
 }
 
 export interface CompanyHoliday {
