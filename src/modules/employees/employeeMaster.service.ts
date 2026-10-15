@@ -14,7 +14,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TEXT_MAX: Record<string, number> = {
   name: 120, email: 254, phone: 20, bloodGroup: 5, emergencyContact: 40, department: 80, designation: 80,
   operationsCategory: 80, managerName: 120, shiftName: 80, notes: 1000, bankName: 80, bankAccount: 34,
-  ifscCode: 11, panNumber: 10, aadhaarNumber: 12, uanNumber: 12,
+  ifscCode: 11, panNumber: 10, aadhaarNumber: 12, uanNumber: 12, esiNumber: 20,
 };
 
 const ALLOWED = new Set<string>([...PERSONAL_FIELDS, ...EMPLOYMENT_FIELDS, ...SALARY_FIELDS, ...BANK_FIELDS]);

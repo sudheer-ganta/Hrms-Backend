@@ -26,6 +26,24 @@ const LeaseModel =
   mongoose.models.SchedulerLease ||
   mongoose.model('SchedulerLease', new Schema({ _id: String, owner: String, leaseUntil: Date }, { collection: 'scheduler_leases' }));
 
+const BACKFILL_EVERY_MS = 6 * 60 * 60_000;
+const BACKFILL_PREVIOUS_MONTH_DAYS = 7;
+
+/**
+ * Gap-filling windows: the current month up to today, plus (during the first week) the whole previous month, so a
+ * missed run or a fresh install heals without anyone re-syncing. Each window stays inside one calendar month,
+ * which keeps it within the vendor API's 31-day limit. Closed months are skipped by the sync itself.
+ */
+export function backfillRanges(today: string): { fromDate: string; toDate: string }[] {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const ranges = [{ fromDate: monthStart, toDate: today }];
+  if (Number(today.slice(8, 10)) <= BACKFILL_PREVIOUS_MONTH_DAYS) {
+    const prevEnd = addDays(monthStart, -1);
+    ranges.unshift({ fromDate: `${prevEnd.slice(0, 7)}-01`, toDate: prevEnd });
+  }
+  return ranges;
+}
+
 export class SyncScheduler {
   private timer: NodeJS.Timeout | null = null;
   private active = false;
@@ -35,6 +53,7 @@ export class SyncScheduler {
   private totalRuns = 0;
   private errorCount = 0;
   private lastRunResult: any = null;
+  private lastBackfillAt = 0;
   private holdsLease = false;
   private readonly instanceId = randomUUID();
 
@@ -112,7 +131,7 @@ export class SyncScheduler {
     };
   }
 
-  /** Syncs yesterday + today (catches late vendor edits and overnight shifts) for both vendor APIs. */
+  /** Syncs yesterday + today (late vendor edits, overnight shifts) for both vendor APIs, plus a periodic month-to-date backfill. */
   private async executeCycle(manual = false): Promise<any> {
     if (this.cycleRunning) return { skipped: 'previous cycle still running' };
     this.holdsLease = await this.acquireLease();
@@ -124,6 +143,24 @@ export class SyncScheduler {
       const opts = { fromDate: addDays(today, -1), toDate: today, triggeredBy: 'SCHEDULED' as const };
       const raw = await syncService.syncAll('RAW', opts);
       const inout = await syncService.syncAll('INOUT', opts);
+      // Fill any gap from earlier in the month (first cycle after start, then every few hours).
+      let backfill: any;
+      if (Date.now() - this.lastBackfillAt >= BACKFILL_EVERY_MS) {
+        const ranges = backfillRanges(today);
+        const results = [];
+        for (const range of ranges) {
+          const bOpts = { ...range, triggeredBy: 'SCHEDULED' as const };
+          results.push(...(await syncService.syncAll('RAW', bOpts)), ...(await syncService.syncAll('INOUT', bOpts)));
+        }
+        if (results.every((r) => r.success)) this.lastBackfillAt = Date.now();
+        backfill = {
+          ranges,
+          fetched: results.reduce((a, r) => a + r.fetched, 0),
+          errors: results.filter((r) => !r.success).map((r) => `${r.sourceId}/${r.syncType}: ${r.error}`),
+        };
+        raw.push(...results.filter((r) => r.syncType === 'RAW'));
+        inout.push(...results.filter((r) => r.syncType === 'INOUT'));
+      }
       const ok = [...raw, ...inout].every((r) => r.success);
       this.totalRuns++;
       if (!ok) this.errorCount++;
@@ -133,6 +170,7 @@ export class SyncScheduler {
         raw: { fetched: raw.reduce((a, r) => a + r.fetched, 0), inserted: raw.reduce((a, r) => a + r.inserted, 0) },
         inOut: { fetched: inout.reduce((a, r) => a + r.fetched, 0), upserted: inout.reduce((a, r) => a + r.inserted, 0) },
         errors: [...raw, ...inout].filter((r) => !r.success).map((r) => `${r.sourceId}/${r.syncType}: ${r.error}`),
+        ...(backfill ? { backfill } : {}),
       };
       return this.lastRunResult;
     } catch (e: any) {

@@ -51,6 +51,7 @@ export interface EmployeeProfile {
   panNumber?: string;
   aadhaarNumber?: string;
   uanNumber?: string;
+  esiNumber?: string; // ESI insurance (IP) number
 
   status: EmployeeStatus;
   notes?: string;
@@ -67,4 +68,4 @@ export const SALARY_FIELDS = [
   'monthlyCtc', 'basicSalary', 'da', 'hra', 'specialAllowance', 'otherAllowance',
   'employeePf', 'employerPf', 'employeeEsic', 'employerEsic', 'professionalTax', 'minimumBonus',
 ] as const;
-export const BANK_FIELDS = ['bankName', 'bankAccount', 'ifscCode', 'panNumber', 'aadhaarNumber', 'uanNumber'] as const;
+export const BANK_FIELDS = ['bankName', 'bankAccount', 'ifscCode', 'panNumber', 'aadhaarNumber', 'uanNumber', 'esiNumber'] as const;

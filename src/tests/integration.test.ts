@@ -463,9 +463,20 @@ describe('HRMS end-to-end (real app, real MongoDB)', { skip: SKIP }, () => {
       assert.equal((await h.call('POST', '/payroll/runs/2026-99/close', { token: t().founder })).status, 400);
     });
 
+    test('a month with working days that have no attendance anywhere is refused unless explicitly acknowledged', async () => {
+      const cov = await h.call('GET', `/payroll/runs/${SEPT}/coverage`, { token: t().founder });
+      ok(cov);
+      assert.ok(cov.body.data.missingDates.length > 0, 'the seeded month only has a few punched days');
+      assert.ok(cov.body.data.daysWithData < cov.body.data.workingDays);
+      const refused = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder });
+      assert.equal(refused.status, 422);
+      assert.match(refused.body.error.message, /Attendance is missing/);
+      assert.equal((await h.call('GET', `/payroll/runs/${SEPT}`, { token: t().founder })).body.data.status, 'OPEN', 'nothing was frozen');
+    });
+
     test('close freezes an immutable versioned snapshot with policy + rules version', async () => {
       const before = (await h.call('GET', `/payroll/all?month=${SEPT}`, { token: t().founder })).body.data;
-      const r = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder });
+      const r = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder, body: { acknowledgeMissingAttendance: true } });
       ok(r);
       assert.equal(r.body.data.status, 'CLOSED');
       assert.equal(r.body.data.currentVersion, 1);
@@ -523,7 +534,7 @@ describe('HRMS end-to-end (real app, real MongoDB)', { skip: SKIP }, () => {
       const live = (await h.call('GET', `/payroll/employee/E001?month=${SEPT}`, { token: t().founder })).body.data;
       assert.equal(live.payrollStatus, 'LIVE');
       ok(await h.call('POST', `/payroll/adjustments/${SEPT}`, { token: t().founder, body: { reason: 'Reopened adjustment (test)', adjustments: { E001: { otHours: 1 } } } }));
-      const close2 = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder });
+      const close2 = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder, body: { acknowledgeMissingAttendance: true } });
       ok(close2);
       assert.equal(close2.body.data.currentVersion, 2);
       const versions = (await h.call('GET', `/payroll/runs/${SEPT}/versions`, { token: t().founder })).body.data;

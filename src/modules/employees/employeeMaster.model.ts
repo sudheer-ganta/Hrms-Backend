@@ -51,6 +51,7 @@ const EmployeeProfileSchema = new Schema<EmployeeProfileDocument>(
     panNumber: { type: String },
     aadhaarNumber: { type: String },
     uanNumber: { type: String },
+    esiNumber: { type: String },
 
     otEligible: { type: Boolean, default: true },
     otMultiplier: { type: Number },

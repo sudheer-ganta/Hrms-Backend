@@ -10,6 +10,7 @@ import { normalizeEmpCode } from '../../utils/empCode.js';
 import { addDays, businessDateFromInstant, istTimeFromInstant, istTimeWithSecondsFromInstant } from '../../utils/istTime.js';
 import { createRawPunchHash } from '../../utils/hashUtils.js';
 import { requireObject, optionalNumber, optionalString } from '../../utils/validate.js';
+import type { UserRole } from '../auth/auth.types.js';
 
 const MIN_GAP_SECONDS = 60;      // double-tap protection
 const MAX_ACCURACY_M = 300;      // GPS fix worse than this is rejected when geofencing is enforced
@@ -103,12 +104,15 @@ class PunchService {
 
   public async recordPunch(
     input: unknown,
-    actor: { id: string; role: 'SUPER_ADMIN' | 'FOUNDER' | 'EMPLOYEE'; empCode?: string; name: string },
+    actor: { id: string; role: UserRole; empCode?: string; name: string },
     now: Date = new Date() // injectable clock (tests); production always uses the real time
   ): Promise<PunchResultDTO> {
     requireDb();
     const body = requireObject(input);
-    const empCode = normalizeEmpCode(actor.role === 'EMPLOYEE' ? actor.empCode : body.empCode ?? actor.empCode);
+    // Only SUPER_ADMIN / FOUNDER may punch for someone else or override the location check;
+    // every other role (EMPLOYEE, HR) is self-service.
+    const isAdmin = actor.role === 'SUPER_ADMIN' || actor.role === 'FOUNDER';
+    const empCode = normalizeEmpCode(isAdmin ? body.empCode ?? actor.empCode : actor.empCode);
     if (!empCode) throw ApiError.validation('Employee code is required to record a punch.', [{ field: 'empCode', issue: 'Required' }]);
 
     const punchType = (body.punchType ?? 'AUTO') as PunchType;
@@ -118,7 +122,7 @@ class PunchService {
     const accuracy = optionalNumber(body.accuracy, 'accuracy', { min: 0, max: 100000 });
     const note = optionalString(body.address ?? body.notes, 'address', 200);
     const override = body.override === true;
-    if (override && actor.role === 'EMPLOYEE') throw ApiError.forbidden('Only an administrator can override the location check.');
+    if (override && !isAdmin) throw ApiError.forbidden('Only an administrator can override the location check.');
 
     const profile = await employeeMasterService.findProfile(empCode);
     if (!profile) throw ApiError.notFound(`Employee ${empCode} not found.`);

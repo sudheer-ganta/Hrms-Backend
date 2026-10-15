@@ -111,6 +111,8 @@ export interface EmployeePayrollSummary {
   ifscCode?: string;
   bankName?: string;
   panNumber?: string;
+  uanNumber?: string;
+  esiNumber?: string;
 }
 
 export interface SendPayslipRequest {

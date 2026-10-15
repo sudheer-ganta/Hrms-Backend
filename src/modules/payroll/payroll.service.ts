@@ -250,6 +250,8 @@ export function computeEmployeePayroll({ profile, month, days, policy, adjustmen
     ifscCode: profile.ifscCode,
     bankName: profile.bankName,
     panNumber: profile.panNumber,
+    uanNumber: profile.uanNumber,
+    esiNumber: profile.esiNumber,
   };
 }
 
@@ -345,7 +347,14 @@ class PayrollService {
     if (closed) {
       const row = closed.snapshot.find((s) => normalizeEmpCode(s.empCode) === code);
       if (!row) throw ApiError.notFound(`Employee ${code} has no record in the closed ${month} payroll.`);
-      return withPayslip({ ...row, payrollStatus: 'CLOSED', isProvisional: false, snapshotVersion: closed.version });
+      // UAN / ESI numbers are identity data, not payroll figures: snapshots frozen before they existed read them from the profile.
+      const ids = row.uanNumber !== undefined && row.esiNumber !== undefined ? undefined : await employeeMasterService.findProfile(code);
+      return withPayslip({
+        ...row,
+        uanNumber: row.uanNumber ?? ids?.uanNumber,
+        esiNumber: row.esiNumber ?? ids?.esiNumber,
+        payrollStatus: 'CLOSED', isProvisional: false, snapshotVersion: closed.version,
+      });
     }
     this.assertReady();
     const policy = policyService.getSettings();

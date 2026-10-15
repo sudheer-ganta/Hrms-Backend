@@ -1,10 +1,14 @@
 import nodemailer from 'nodemailer';
-import { EmployeePayrollSummary } from './payroll.types.js';
+import { EmployeePayrollSummary, PayslipLine } from './payroll.types.js';
 
 const esc = (v: unknown): string =>
   String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-const maskTail = (v?: string) => (v ? `${'*'.repeat(Math.max(0, v.length - 4))}${v.slice(-4)}` : '');
+const money = (n: number) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const COMPANY_ADDRESS = 'Flat No: 43-44/345, 1st Main Road, Banashankari Layout, Bengaluru, Bengaluru Urban, Karnataka - 560049';
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortMonth = (month: string) => { const [y, m] = month.split('-').map(Number); return `${MONTHS[(m || 1) - 1]}_${String(y).slice(-2)}`; };
+const periodLabel = (month: string) => { const [y, m] = month.split('-').map(Number); return `${MONTHS[(m || 1) - 1]}- ${y}`; };
+const dotDate = (iso?: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? ''); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
 
 class EmailService {
   private transporter: any = null;
@@ -26,35 +30,60 @@ class EmailService {
     }
   }
 
-  /** Payslip email. Every figure comes from the backend payroll result; all text is HTML-escaped. */
+  /**
+   * Payslip email, laid out like the company payslip (PDF template). Every figure comes from the backend
+   * payroll result; all text is HTML-escaped. Lines are grouped under the template's headings, and any line
+   * without a heading is appended so the columns foot to the totals.
+   */
   private generatePayslipHtml(s: EmployeePayrollSummary): string {
-    const rows = (lines: { label: string; amount: number; note?: string }[]) =>
-      lines.map((l) => `<tr><td style="padding:4px 8px">${esc(l.label)}${l.note ? ` <span style="color:#64748b;font-size:11px">(${esc(l.note)})</span>` : ''}</td><td style="padding:4px 8px;text-align:right">${inr(l.amount)}</td></tr>`).join('');
     const p = s.payslip;
+    const EARN: [string, string[], number | undefined][] = [
+      ['Basic Pay', ['BASIC'], s.basicSalary], ['VDA', ['DA'], s.da], ['HRA', ['HRA'], s.hra], ['LTA', [], undefined],
+      ['Other Allowances', ['OTHER'], s.otherAllowance], ['Sunday working Allowance', ['WEEKLY_OFF_WORK', 'HOLIDAY_WORK', 'SUNDAY'], undefined],
+      ['Conveyance', [], undefined], ['Increments-Re-Imbursements', [], undefined], [`incentive for ${shortMonth(s.month)}`, [], undefined],
+      ['Other / Attn Bonus', [], undefined], ['Special Allowance', ['SPECIAL'], s.allowances],
+    ];
+    const DED: [string, string[]][] = [['ESI', ['ESI']], ['PF', ['PF']], ['PT', ['PT']], ['Salary Advance', []], ['Other deduction', []], ['LWF', []]];
+    const group = (lines: PayslipLine[], heads: [string, string[]][]) => {
+      const used = new Set<string>();
+      const rows = heads.map(([label, codes]) => {
+        const mine = lines.filter((l) => codes.includes(l.code));
+        mine.forEach((l) => used.add(l.code));
+        return { label, amount: Math.round(mine.reduce((a, l) => a + l.amount, 0) * 100) / 100 };
+      });
+      for (const l of lines) if (!used.has(l.code)) rows.push({ label: l.note ? `${l.label} (${l.note})` : l.label, amount: l.amount });
+      return rows;
+    };
+    const earn = group(p.earnings, EARN.map(([l, c]) => [l, c]));
+    const ded = group(p.deductions, DED);
+    const n = Math.max(earn.length, ded.length);
+    const cell = 'border-left:1px solid #000;border-right:1px solid #000;padding:2px 6px';
+    const body = Array.from({ length: n }, (_, i) => {
+      const e = earn[i]; const d = ded[i];
+      return `<tr><td style="${cell}">${esc(e?.label ?? '')}</td><td style="${cell};text-align:right">${e ? esc(EARN[i]?.[2] ?? 0) : ''}</td><td style="${cell};text-align:right">${e ? esc(e.amount) : ''}</td>` +
+        `<td style="${cell}">${esc(d?.label ?? '')}</td><td style="${cell};text-align:right">${d ? esc(d.amount) : ''}</td></tr>`;
+    }).join('');
+    const box = 'border:1px solid #000;padding:4px 6px;font-weight:bold';
+    const info = (label: string, value: unknown) => `<tr><td style="padding:1px 0;width:55%">${esc(label)}</td><td style="width:14px">:</td><td style="font-weight:bold">${esc(value === undefined || value === '' ? '—' : value)}</td></tr>`;
     return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
-<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#1e293b">
-<div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#011638;color:#fff;padding:20px;text-align:center"><h2 style="margin:0">ColorMyles HRMS</h2>
-  <div style="font-size:13px;color:#94a3b8">Salary Payslip, ${esc(s.month)}</div></div>
-  <div style="padding:20px">
-    <p>Dear <strong>${esc(s.name)}</strong> (Emp ID: <strong>${esc(s.empCode)}</strong>),</p>
-    <p style="font-size:13px">Paid days: <strong>${esc(s.payableDays)}</strong> of ${esc(s.monthDays)}. Loss of pay: <strong>${esc(s.lopDays)}</strong> day(s).</p>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr style="background:#ecfdf5"><th style="text-align:left;padding:6px 8px">Earnings</th><th style="text-align:right;padding:6px 8px">₹</th></tr>
-      ${rows(p.earnings)}
-      <tr style="font-weight:bold"><td style="padding:6px 8px">Total earnings</td><td style="padding:6px 8px;text-align:right">${inr(p.totalEarnings)}</td></tr>
-      <tr style="background:#fef2f2"><th style="text-align:left;padding:6px 8px">Deductions</th><th style="text-align:right;padding:6px 8px">₹</th></tr>
-      ${rows(p.deductions)}
-      <tr style="font-weight:bold"><td style="padding:6px 8px">Total deductions</td><td style="padding:6px 8px;text-align:right">${inr(p.totalDeductions)}</td></tr>
-    </table>
-    <div style="background:#011638;color:#fff;border-radius:10px;text-align:center;padding:16px;margin:18px 0">
-      <div style="font-size:12px;opacity:.85">NET PAYABLE</div>
-      <div style="font-size:26px;font-weight:800">${inr(p.netPay)}</div>
-      <div style="font-size:12px;opacity:.85">${esc(s.netPayableWords)}</div>
-    </div>
-    <p style="font-size:12px;color:#475569">${s.bankAccount ? `Bank A/C: ${esc(maskTail(s.bankAccount))}` : ''}</p>
-  </div>
-  <div style="background:#f1f5f9;padding:12px;text-align:center;font-size:12px;color:#64748b">System-generated payslip. For discrepancies contact HR/Accounts.</div>
+<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#000">
+<div style="max-width:680px;margin:0 auto;background:#fff;border:1px solid #cbd5e1;padding:20px;font-size:13px">
+  <div style="text-align:center"><div style="font-size:28px;font-weight:bold">COLOR MYLES</div>
+  <div style="font-size:11px;margin-top:6px">${esc(COMPANY_ADDRESS)}</div>
+  <div style="font-weight:bold;margin:12px 0">Pay Slip for the period of ${esc(periodLabel(s.month))}</div></div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    ${info('Employee Id', s.empCode)}${info('Name', s.name)}${info('Date Of Joining', dotDate(s.doj))}${info('UAN number', s.uanNumber)}
+    ${info('ESI IP Number', s.esiNumber || '0')}${info('Designation', s.designation)}${info('Total Days', s.monthDays)}
+    ${info('Days of Worked', s.payableDays)}${info('Days Absent', s.lopDays)}
+  </table>
+  <table style="width:100%;border-collapse:collapse">
+    <tr style="font-weight:bold"><td style="${box}">Earnings</td><td style="${box};text-align:right">Fixed Wages</td><td style="${box};text-align:right">Amount</td><td style="${box}">Deductions</td><td style="${box};text-align:right">Amount</td></tr>
+    ${body}
+    <tr style="background:#ffff00"><td style="${box}">Total Earnings</td><td style="${box};text-align:right">${esc(money(s.grossSalary))}</td><td style="${box};text-align:right">${esc(money(p.totalEarnings))}</td><td style="${box}">Total Deductions</td><td style="${box};text-align:right">${esc(money(p.totalDeductions))}</td></tr>
+    <tr style="background:#fce4d6"><td style="${box}" colspan="2">Net Pay</td><td style="${box};text-align:right" colspan="3">${esc(money(p.netPay))}</td></tr>
+  </table>
+  <p style="margin:14px 0 2px"><strong>Amount in Words:</strong></p><div>${esc(s.netPayableWords)}</div>
+  <p style="text-align:center;font-weight:bold;font-size:12px;margin-top:36px">Computer Generated, Signature Not Required</p>
 </div></body></html>`;
   }
 

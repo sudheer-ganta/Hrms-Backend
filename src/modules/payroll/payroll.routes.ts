@@ -22,6 +22,7 @@ router.get('/runs', ...access.HR_OR_ABOVE, payrollRunController.listRuns);
 router.get('/runs/:month', ...access.HR_OR_ABOVE, payrollRunController.getStatus);
 router.get('/runs/:month/versions', ...access.HR_OR_ABOVE, payrollRunController.listVersions);
 router.get('/runs/:month/versions/:version', ...access.HR_OR_ABOVE, payrollRunController.getVersion);
+router.get('/runs/:month/coverage', ...access.HR_OR_ABOVE, payrollRunController.getCoverage);
 router.post('/runs/:month/close', ...access.HR_OR_ABOVE, payrollRunController.closeMonth);
 // Reopening a closed payroll is the most consequential payroll action: SUPER_ADMIN only.
 router.post('/runs/:month/reopen', ...access.SUPER_ADMIN_ONLY, payrollRunController.reopenMonth);

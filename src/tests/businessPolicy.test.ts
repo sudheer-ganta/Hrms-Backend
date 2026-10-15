@@ -27,8 +27,8 @@ const defaultProfile = (over: Partial<EmployeeProfile> = {}): EmployeeProfile =>
 });
 
 describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
-  // 1. Half-day → 0.5 payable day
-  test('1. Half-day → 0.5 payable day', () => {
+  // 1. Half-day â†’ 0.5 payable day
+  test('1. Half-day â†’ 0.5 payable day', () => {
     assert.equal(PAYROLL_RULES.halfDayLopFraction, 0.5);
     const day = resolveDay('2026-10-07', { firstIn: '09:00', lastOut: '12:30', workMinutes: 210 }, ctx());
     assert.equal(day.status, 'HALF_DAY');
@@ -40,8 +40,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 0.5);
   });
 
-  // 2. Full-day → 1.0
-  test('2. Full-day → 1.0 payable day', () => {
+  // 2. Full-day â†’ 1.0
+  test('2. Full-day â†’ 1.0 payable day', () => {
     const day = resolveDay('2026-10-07', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510 }, ctx());
     assert.equal(day.status, 'PRESENT');
 
@@ -52,8 +52,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 1.0);
   });
 
-  // 3. Paid leave → 1.0
-  test('3. Paid leave → 1.0 payable day', () => {
+  // 3. Paid leave â†’ 1.0
+  test('3. Paid leave â†’ 1.0 payable day', () => {
     const adj: ActiveAdjustment = { id: 'adj_leave_1', requestId: 'req_1', kind: 'LEAVE', paid: true, fraction: 1 };
     const day = resolveDay('2026-10-07', { adjustments: [adj] }, ctx());
     assert.equal(day.status, 'LEAVE_PAID');
@@ -65,8 +65,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 1.0);
   });
 
-  // 4. Unpaid leave → 0
-  test('4. Unpaid leave → 0 payable day (1.0 LOP)', () => {
+  // 4. Unpaid leave â†’ 0
+  test('4. Unpaid leave â†’ 0 payable day (1.0 LOP)', () => {
     const adj: ActiveAdjustment = { id: 'adj_unpaid_1', requestId: 'req_2', kind: 'LEAVE', paid: false, fraction: 1 };
     const day = resolveDay('2026-10-07', { adjustments: [adj] }, ctx());
     assert.equal(day.status, 'LEAVE_UNPAID');
@@ -78,8 +78,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 0);
   });
 
-  // 5. WFH automatic → 1.0
-  test('5. WFH automatic request approval → 1.0 payable day', () => {
+  // 5. WFH automatic â†’ 1.0
+  test('5. WFH automatic request approval â†’ 1.0 payable day', () => {
     const adj: ActiveAdjustment = { id: 'adj_wfh_auto', requestId: 'req_wfh', kind: 'WORK_FROM_HOME' };
     const day = resolveDay('2026-10-07', { adjustments: [adj] }, ctx());
     assert.equal(day.status, 'WORK_FROM_HOME');
@@ -93,8 +93,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 1.0);
   });
 
-  // 6. WFH manual → 1.0
-  test('6. WFH manual HR adjustment → 1.0 payable day', () => {
+  // 6. WFH manual â†’ 1.0
+  test('6. WFH manual HR adjustment â†’ 1.0 payable day', () => {
     const adj: ActiveAdjustment = { id: 'adj_wfh_manual', requestId: 'req_hr_direct', kind: 'WORK_FROM_HOME' };
     const day = resolveDay('2026-10-07', { adjustments: [adj] }, ctx());
     assert.equal(day.status, 'WORK_FROM_HOME');
@@ -106,7 +106,7 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.payableDays, 1.0);
   });
 
-  // 7. Absent → WFH adjustment → 1.0
+  // 7. Absent â†’ WFH adjustment â†’ 1.0
   test('7. Absent day overridden to WFH adjustment becomes 1.0 payable day', () => {
     // Before adjustment: Absent
     const initialDay = resolveDay('2026-10-07', {}, ctx());
@@ -122,7 +122,7 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.lopDays, 0);
   });
 
-  // 8. Remove WFH adjustment → returns to automatic result
+  // 8. Remove WFH adjustment â†’ returns to automatic result
   test('8. Remove/revoke WFH adjustment returns to resolver automatic result', () => {
     // Adjustment active
     const adj: ActiveAdjustment = { id: 'adj_wfh_1', requestId: 'req_1', kind: 'WORK_FROM_HOME' };
@@ -134,8 +134,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(afterRevoke.status, 'ABSENT');
   });
 
-  // 9. Sunday without work → WEEKLY_OFF
-  test('9. Sunday without work → WEEKLY_OFF', () => {
+  // 9. Sunday without work â†’ WEEKLY_OFF
+  test('9. Sunday without work â†’ WEEKLY_OFF', () => {
     // 2026-10-04 is a Sunday
     const day = resolveDay('2026-10-04', {}, ctx());
     assert.equal(day.status, 'WEEKLY_OFF');
@@ -148,10 +148,10 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.lopDays, 0);
   });
 
-  // 10. Specific Sunday approved as worked → weekly-off compensation
-  test('10. Specific Sunday approved as worked → weekly-off compensation', () => {
+  // 10. Specific Sunday approved as worked â†’ weekly-off compensation
+  test('10. Specific Sunday approved as worked â†’ weekly-off compensation', () => {
     // Automatic recognition of worked Sunday via punches or approved adjustment
-    const autoPolicy = policy({ offDayWork: { ...DEFAULT_SETTINGS.offDayWork, weeklyOff: { recognition: 'AUTOMATIC', multiplier: 2 } } });
+    const autoPolicy = policy({ offDayWork: { ...DEFAULT_SETTINGS.offDayWork, weeklyOff: { recognition: 'AUTOMATIC' } } });
     const sundayWorked = resolveDay('2026-10-04', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510 }, { policy: autoPolicy, today: TODAY });
     assert.equal(sundayWorked.status, 'WEEKLY_OFF');
     assert.equal(sundayWorked.offDayWorkFraction, 1.0);
@@ -164,7 +164,7 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
 
   // 11. Other Sundays remain WEEKLY_OFF
   test('11. Other Sundays remain normal WEEKLY_OFF when one is worked', () => {
-    const autoPolicy = policy({ offDayWork: { ...DEFAULT_SETTINGS.offDayWork, weeklyOff: { recognition: 'AUTOMATIC', multiplier: 2 } } });
+    const autoPolicy = policy({ offDayWork: { ...DEFAULT_SETTINGS.offDayWork, weeklyOff: { recognition: 'AUTOMATIC' } } });
     const sunday1Worked = resolveDay('2026-10-04', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510 }, { policy: autoPolicy, today: '2026-10-31' });
     const sunday2Off = resolveDay('2026-10-11', {}, { policy: autoPolicy, today: '2026-10-31' });
 
@@ -177,8 +177,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.weeklyOffWorkDays, 1);
   });
 
-  // 12. Paid holiday without work → HOLIDAY
-  test('12. Paid holiday without work → HOLIDAY (paid day off)', () => {
+  // 12. Paid holiday without work â†’ HOLIDAY
+  test('12. Paid holiday without work â†’ HOLIDAY (paid day off)', () => {
     const hPolicy = policy({ holidays: [{ id: 'h1', date: '2026-10-02', name: 'Gandhi Jayanti', type: 'NATIONAL', paid: true }] });
     const day = resolveDay('2026-10-02', {}, { policy: hPolicy, today: TODAY });
     assert.equal(day.status, 'HOLIDAY');
@@ -192,11 +192,11 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     assert.equal(payroll.lopDays, 0);
   });
 
-  // 13. Paid holiday with work → automatic holiday compensation
-  test('13. Paid holiday with work → automatic holiday compensation', () => {
+  // 13. Paid holiday with work â†’ automatic holiday compensation
+  test('13. Paid holiday with work â†’ automatic holiday compensation', () => {
     const hPolicy = policy({
       holidays: [{ id: 'h1', date: '2026-10-02', name: 'Gandhi Jayanti', type: 'NATIONAL', paid: true }],
-      offDayWork: { ...DEFAULT_SETTINGS.offDayWork, paidHoliday: { recognition: 'AUTOMATIC', multiplier: 2 } },
+      offDayWork: { ...DEFAULT_SETTINGS.offDayWork, paidHoliday: { recognition: 'AUTOMATIC' } },
     });
     const day = resolveDay('2026-10-02', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510 }, { policy: hPolicy, today: TODAY });
     assert.equal(day.status, 'HOLIDAY');
@@ -213,8 +213,8 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
     const dualPolicy = policy({
       holidays: [{ id: 'h1', date: '2026-10-02', name: 'Gandhi Jayanti', type: 'NATIONAL', paid: true }],
       offDayWork: {
-        weeklyOff: { recognition: 'AUTOMATIC', multiplier: 2 },
-        paidHoliday: { recognition: 'AUTOMATIC', multiplier: 2 },
+        weeklyOff: { recognition: 'AUTOMATIC' },
+        paidHoliday: { recognition: 'AUTOMATIC' },
       },
     });
     const holidayWorked = resolveDay('2026-10-02', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510 }, { policy: dualPolicy, today: TODAY });
@@ -234,7 +234,7 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
   });
 
   // 15. PT uses current configured Karnataka rule
-  test('15. PT uses current configured Karnataka rule (threshold ₹25,000 → ₹200)', () => {
+  test('15. PT uses current configured Karnataka rule (threshold â‚¹25,000 â†’ â‚¹200)', () => {
     assert.equal(PAYROLL_RULES.ptGrossThreshold, 25000);
     assert.equal(PAYROLL_RULES.ptMonthly, 200);
 
@@ -246,7 +246,7 @@ describe('FINAL BUSINESS POLICY VALIDATION SUITE (20/20)', () => {
   });
 
   // 16. ESIC is calculated from statutory wages, NOT CTC
-  test('16. ESIC calculated on statutory gross wages (ceiling ₹21,000), NOT CTC', () => {
+  test('16. ESIC calculated on statutory gross wages (ceiling â‚¹21,000), NOT CTC', () => {
     assert.equal(PAYROLL_RULES.esiWageCeiling, 21000);
     assert.equal(PAYROLL_RULES.esiEmployeeRate, 0.0075);
     assert.equal(PAYROLL_RULES.esiEmployerRate, 0.0325);
