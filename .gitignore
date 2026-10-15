@@ -20,3 +20,15 @@ yarn-error.log*
 .DS_Store
 .vscode/
 .idea/
+
+# Employee / attendance data and backups must NEVER be committed (PII)
+data/
+*.bak.json
+*.migrated.bak.json
+attendance_store.json
+employee_profiles*.json
+*.csv
+.mongo-test/
+
+# local test binaries
+mongod*.exe

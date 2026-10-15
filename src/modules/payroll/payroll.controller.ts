@@ -1,120 +1,69 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware.js';
 import { payrollService } from './payroll.service.js';
 import { emailService } from './email.service.js';
-import { payrollAdjustmentService } from './payrollAdjustment.service.js';
+import { payrollAdjustmentService, validateAdjustments } from './payrollAdjustment.service.js';
+import { handle } from '../../utils/apiError.js';
+import { optionalMonth, requireMonth, requireObject, optionalString } from '../../utils/validate.js';
+import { isValidEmpCode, normalizeEmpCode } from '../../utils/empCode.js';
+import { ApiError } from '../../utils/apiError.js';
+
+const actor = (req: AuthRequest) => req.user?.name || req.user?.email || 'Unknown';
 
 export class PayrollController {
-  public getEmployeePayroll = async (req: Request, res: Response) => {
-    try {
-      const empCode = req.params.empCode as string;
-      const month = req.query.month as string | undefined;
-      const summary = await payrollService.calculateEmployeePayroll(empCode, month);
-      res.json({ success: true, data: summary });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public getEmployeePayroll = handle(async (req: AuthRequest, res: Response) => {
+    const month = optionalMonth(req.query.month);
+    const summary = await payrollService.calculateEmployeePayroll(String(req.params.empCode), month);
+    res.json({ success: true, data: summary });
+  });
 
-  public getAllPayroll = async (req: Request, res: Response) => {
-    try {
-      const month = req.query.month as string | undefined;
-      const summaries = await payrollService.calculateAllEmployeesPayroll(month);
-      res.json({
-        success: true,
-        count: summaries.length,
-        data: summaries
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public getAllPayroll = handle(async (req: AuthRequest, res: Response) => {
+    const summaries = await payrollService.calculateAllEmployeesPayroll(optionalMonth(req.query.month));
+    res.json({ success: true, count: summaries.length, data: summaries });
+  });
 
-  public getAdjustments = async (req: Request, res: Response) => {
-    try {
-      const month = req.params.month as string;
-      const data = await payrollAdjustmentService.getAdjustments(month);
-      res.json({ success: true, data });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public getAdjustments = handle(async (req: AuthRequest, res: Response) => {
+    const data = await payrollAdjustmentService.getAdjustments(requireMonth(req.params.month));
+    res.json({ success: true, data });
+  });
 
-  // Prices UNSAVED OT Calculator edits through the real payroll engine. Read-only: nothing is persisted.
-  public previewPayroll = async (req: Request, res: Response) => {
-    try {
-      const month = req.params.month as string;
-      const adjustments = req.body?.adjustments || {};
-      const data = await payrollService.calculateAllEmployeesPayroll(month, adjustments);
-      res.json({ success: true, data });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  /** Prices UNSAVED OT Calculator edits through the real payroll engine. Persists nothing. */
+  public previewPayroll = handle(async (req: AuthRequest, res: Response) => {
+    const month = requireMonth(req.params.month);
+    const body = requireObject(req.body);
+    const adjustments = validateAdjustments(body.adjustments ?? {});
+    const data = await payrollService.calculateAllEmployeesPayroll(month, { adjustmentsOverride: adjustments });
+    res.json({ success: true, data });
+  });
 
-  public saveAdjustments = async (req: AuthRequest, res: Response) => {
-    try {
-      const month = req.params.month as string;
-      const { adjustments } = req.body;
-      const user = req.user?.name || req.user?.email || 'Admin';
-      const data = await payrollAdjustmentService.saveAdjustments(month, adjustments || {}, user);
-      payrollService.invalidateAllPayrollCache(month);
-      res.json({
-        success: true,
-        message: 'Overtime adjustments saved to payroll successfully.',
-        data,
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public saveAdjustments = handle(async (req: AuthRequest, res: Response) => {
+    const month = requireMonth(req.params.month);
+    const body = requireObject(req.body);
+    const data = await payrollAdjustmentService.saveAdjustments(month, body.adjustments ?? {}, actor(req), body.reason);
+    res.json({ success: true, data });
+  });
 
-  public clearAdjustments = async (req: AuthRequest, res: Response) => {
-    try {
-      const month = req.params.month as string;
-      const user = req.user?.name || req.user?.email || 'Admin';
-      await payrollAdjustmentService.clearAdjustments(month, user);
-      payrollService.invalidateAllPayrollCache(month);
-      res.json({
-        success: true,
-        message: 'Overtime adjustments cleared successfully.',
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public clearAdjustments = handle(async (req: AuthRequest, res: Response) => {
+    await payrollAdjustmentService.clearAdjustments(requireMonth(req.params.month), actor(req));
+    res.json({ success: true, data: { cleared: true } });
+  });
 
-  public getAdjustmentHistory = async (req: Request, res: Response) => {
-    try {
-      const month = req.params.month as string;
-      const history = await payrollAdjustmentService.getAdjustmentHistory(month);
-      res.json({ success: true, data: history });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public getAdjustmentHistory = handle(async (req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await payrollAdjustmentService.getAdjustmentHistory(requireMonth(req.params.month)) });
+  });
 
-  public sendPayslip = async (req: Request, res: Response) => {
-    try {
-      const { empCode, month, recipientEmail } = req.body;
-      if (!empCode) {
-        return res.status(400).json({ success: false, error: 'empCode is required' });
-      }
-
-      const summary = await payrollService.calculateEmployeePayroll(empCode, month);
-      const result = await emailService.sendPayslipEmail(summary, recipientEmail);
-      
-      res.json({
-        success: true,
-        message: result.message,
-        sentTo: result.sentTo,
-        previewHtml: result.previewHtml
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+  public sendPayslip = handle(async (req: AuthRequest, res: Response) => {
+    const body = requireObject(req.body);
+    if (!isValidEmpCode(body.empCode)) throw ApiError.validation('A valid empCode is required.', [{ field: 'empCode', issue: 'Invalid' }]);
+    const month = requireMonth(body.month, 'month');
+    const recipient = optionalString(body.recipientEmail, 'recipientEmail', 254);
+    const summary = await payrollService.calculateEmployeePayroll(normalizeEmpCode(body.empCode), month);
+    if (summary.isProvisional) {
+      throw ApiError.rule(`Payroll for ${month} is not closed yet. Payslips are emailed only for closed months.`);
     }
-  };
+    const result = await emailService.sendPayslipEmail(summary, recipient);
+    res.json({ success: true, data: { message: result.message, sentTo: result.sentTo, previewHtml: result.previewHtml } });
+  });
 }
 
 export const payrollController = new PayrollController();
-

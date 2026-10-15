@@ -1,217 +1,270 @@
-import mongoose from 'mongoose';
 import { EmployeeModel } from './employeeMaster.model.js';
-import { EmployeeProfile, EmployeeProfileUpdateInput } from './employeeMaster.types.js';
-import { InOutModel } from '../attendance/inOut.model.js';
-import { AttendanceModel } from '../attendance/attendance.model.js';
+import {
+  EmployeeProfile, EMPLOYEE_STATUSES, PERSONAL_FIELDS, EMPLOYMENT_FIELDS, SALARY_FIELDS, BANK_FIELDS,
+} from './employeeMaster.types.js';
+import { computeSalaryBreakdown, SalaryBreakdown } from './salary.js';
+import { siteService } from '../sites/site.service.js';
+import { ApiError } from '../../utils/apiError.js';
+import { normalizeEmpCode, isValidEmpCode } from '../../utils/empCode.js';
+import { isValidBusinessDate, isValidBusinessMonth } from '../../utils/istTime.js';
+import { requireDb } from '../../config/db.js';
+import { requireObject, optionalNumber } from '../../utils/validate.js';
 
-function toProfile(doc: any): EmployeeProfile {
-  const { _id, __v, createdAt, updatedAt, ...rest } = doc;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TEXT_MAX: Record<string, number> = {
+  name: 120, email: 254, phone: 20, bloodGroup: 5, emergencyContact: 40, department: 80, designation: 80,
+  operationsCategory: 80, managerName: 120, shiftName: 80, notes: 1000, bankName: 80, bankAccount: 34,
+  ifscCode: 11, panNumber: 10, aadhaarNumber: 12, uanNumber: 12,
+};
+
+const ALLOWED = new Set<string>([...PERSONAL_FIELDS, ...EMPLOYMENT_FIELDS, ...SALARY_FIELDS, ...BANK_FIELDS]);
+
+export const maskTail = (v?: string, keep = 4): string | undefined => {
+  if (!v) return v;
+  return v.length <= keep ? '*'.repeat(v.length) : `${'*'.repeat(v.length - keep)}${v.slice(-keep)}`;
+};
+
+/** Canonical DTO: strips internals, merges legacy duplicate fields. */
+export function toProfile(doc: any): EmployeeProfile {
+  const { _id, __v, createdAt, joiningDate, bankAccountNumber, allowances, ...rest } = doc;
   return {
     ...rest,
-    updatedAt: rest.updatedAt || (updatedAt ? new Date(updatedAt).toISOString() : undefined),
+    employeeId: String(_id),
+    doj: rest.doj || joiningDate || undefined,
+    bankAccount: rest.bankAccount || bankAccountNumber || undefined,
+    otEligible: rest.otEligible !== false,
+    status: rest.status || 'active',
+    updatedAt: rest.updatedAt ? (typeof rest.updatedAt === 'string' ? rest.updatedAt : new Date(rest.updatedAt).toISOString()) : undefined,
   } as EmployeeProfile;
 }
 
-class EmployeeMasterService {
-  private lastDiscoveryTime = 0;
-  private static readonly DISCOVERY_INTERVAL_MS = 60 * 1000; // at most once every 60s
+/** Roster views never need full identity numbers. */
+export const maskProfile = (p: EmployeeProfile): EmployeeProfile => ({
+  ...p,
+  aadhaarNumber: maskTail(p.aadhaarNumber),
+  bankAccount: maskTail(p.bankAccount),
+});
 
-  private assertDbConnected(): void {
-    if (mongoose.connection.readyState !== 1) {
-      throw new Error('Employee master data requires an active database connection. Please try again shortly.');
-    }
+/** Validates and normalizes a client profile payload against the explicit whitelist. */
+export async function validateProfileInput(input: unknown): Promise<Record<string, unknown>> {
+  const body = requireObject(input);
+  const unknown = Object.keys(body).filter((k) => !ALLOWED.has(k));
+  // System / derived fields sent by older clients are ignored silently; truly unknown keys are rejected.
+  const derived = new Set(['empCode', 'employeeId', 'annualCtc', 'fixedSalary', 'grossSalary', 'totalNetSalary', 'updatedAt', 'createdAt', '_id']);
+  const rejected = unknown.filter((k) => !derived.has(k));
+  if (rejected.length) {
+    throw ApiError.validation('Unknown or non-editable fields.', rejected.map((f) => ({ field: f, issue: 'Not editable' })));
   }
 
-  /**
-   * Returns all employee profiles, automatically populating new biometric employees
-   */
+  const out: Record<string, unknown> = {};
+  const details: { field: string; issue: string }[] = [];
+  const fail = (field: string, issue: string) => details.push({ field, issue });
+
+  for (const [k, v] of Object.entries(body)) {
+    if (!ALLOWED.has(k) || v === undefined) continue;
+    if ((SALARY_FIELDS as readonly string[]).includes(k) || k === 'otMultiplier' || k === 'otRatePerHour') {
+      if (v === null || v === '') { out[k] = null; continue; }
+      const num = optionalNumber(v, k, { min: 0, max: 100_000_000 });
+      out[k] = num;
+      continue;
+    }
+    if (k === 'otEligible') { out[k] = Boolean(v); continue; }
+    if (k === 'status') {
+      if (!(EMPLOYEE_STATUSES as readonly string[]).includes(String(v))) fail('status', 'Invalid status');
+      else out[k] = v;
+      continue;
+    }
+    if (k === 'gender') {
+      if (v !== '' && !['Male', 'Female', 'Other'].includes(String(v))) fail('gender', 'Invalid gender');
+      else out[k] = v === '' ? undefined : v;
+      continue;
+    }
+    if (k === 'dob' || k === 'doj') {
+      if (v === '' || v === null) out[k] = undefined;
+      else if (!isValidBusinessDate(v)) fail(k, 'Must be YYYY-MM-DD');
+      else out[k] = v;
+      continue;
+    }
+    if (k === 'email') {
+      if (v === '' || v === null) out[k] = undefined;
+      else if (typeof v !== 'string' || !EMAIL_RE.test(v)) fail('email', 'Invalid email');
+      else out[k] = v.trim().toLowerCase();
+      continue;
+    }
+    if (k === 'managerEmpCode') {
+      if (v === '' || v === null) out[k] = undefined;
+      else if (!isValidEmpCode(v)) fail(k, 'Invalid employee code');
+      else out[k] = normalizeEmpCode(v);
+      continue;
+    }
+    if (k === 'location') {
+      if (v === '' || v === null) { out[k] = undefined; continue; }
+      const wanted = String(v).trim().toLowerCase();
+      const sites = await siteService.getSites();
+      const match = sites.find((s) => [s.siteId, s.name, s.displayName].some((x) => x.toLowerCase() === wanted));
+      if (!match) fail('location', `Unknown site. Use one of: ${sites.map((s) => s.siteId).join(', ')}`);
+      else out[k] = match.siteId;
+      continue;
+    }
+    if (typeof v !== 'string') { fail(k, 'Must be text'); continue; }
+    const trimmed = v.trim();
+    if (!trimmed) { out[k] = undefined; continue; }
+    if (trimmed.length > (TEXT_MAX[k] ?? 200)) { fail(k, `Max ${TEXT_MAX[k] ?? 200} characters`); continue; }
+    if (k === 'panNumber' || k === 'ifscCode') {
+      out[k] = trimmed.toUpperCase();
+      continue;
+    }
+    out[k] = trimmed;
+  }
+  if (details.length) throw ApiError.validation('Profile validation failed.', details);
+  return out;
+}
+
+class EmployeeMasterService {
+  private inactiveCache: { codes: Set<string>; expiresAt: number } | null = null;
+
+  /** Profile or null. Read-only: NEVER creates anything. */
+  public async findProfile(empCode: string): Promise<EmployeeProfile | null> {
+    requireDb();
+    const doc = await EmployeeModel.findOne({ empCode: normalizeEmpCode(empCode) }).lean();
+    return doc ? toProfile(doc) : null;
+  }
+
+  public async requireProfile(empCode: string): Promise<EmployeeProfile> {
+    const p = await this.findProfile(empCode);
+    if (!p) throw ApiError.notFound(`Employee ${normalizeEmpCode(empCode)} not found.`);
+    return p;
+  }
+
   public async getAllProfiles(): Promise<EmployeeProfile[]> {
-    this.assertDbConnected();
-    await this.discoverNewEmployees();
-    const docs = await EmployeeModel.find({}).lean();
+    requireDb();
+    const docs = await EmployeeModel.find({}).sort({ empCode: 1 }).lean();
     return docs.map(toProfile);
   }
 
-  /**
-   * Scans recent biometric data for employee codes with no master profile yet,
-   * and creates a baseline profile for each so they show up across the app.
-   */
-  private async discoverNewEmployees(): Promise<void> {
-    const now = Date.now();
-    if (now - this.lastDiscoveryTime < EmployeeMasterService.DISCOVERY_INTERVAL_MS) return;
-    this.lastDiscoveryTime = now;
+  /** Codes of employees no longer active (excluded from rosters/dashboards). */
+  public async getInactiveCodes(): Promise<Set<string>> {
+    if (this.inactiveCache && this.inactiveCache.expiresAt > Date.now()) return this.inactiveCache.codes;
+    requireDb();
+    const docs = await EmployeeModel.find({ status: { $in: ['inactive', 'resigned'] } }).select('empCode').lean();
+    const codes = new Set(docs.map((d: any) => normalizeEmpCode(d.empCode)));
+    this.inactiveCache = { codes, expiresAt: Date.now() + 30_000 };
+    return codes;
+  }
 
-    let inOutRecords: any[] = [];
-    let rawRecords: any[] = [];
-    try {
-      [inOutRecords, rawRecords] = await Promise.all([
-        InOutModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
-        AttendanceModel.find({}, { employeeCode: 1, employeeName: 1, sourceId: 1 }).limit(1000).maxTimeMS(2000).lean(),
-      ]);
-    } catch {
-      return;
-    }
+  public invalidateCaches(): void {
+    this.inactiveCache = null;
+  }
 
-    const enrolledMap = new Map<string, { name: string; location: string }>();
-    for (const r of inOutRecords) {
-      if (r.employeeCode && !enrolledMap.has(r.employeeCode)) {
-        enrolledMap.set(r.employeeCode, {
-          name: r.employeeName || `Employee ${r.employeeCode}`,
-          location: r.sourceId || 'Budigere',
-        });
-      }
-    }
-    for (const p of rawRecords) {
-      if (p.employeeCode && !enrolledMap.has(p.employeeCode)) {
-        enrolledMap.set(p.employeeCode, {
-          name: p.employeeName || `Employee ${p.employeeCode}`,
-          location: p.sourceId || 'Budigere',
-        });
-      }
-    }
-
-    if (enrolledMap.size === 0) return;
-
-    const existingCodes = new Set(
-      (await EmployeeModel.find({}, { empCode: 1 }).lean()).map((d: any) => d.empCode)
+  /** Pure salary preview for the edit form: same formula as save, nothing persisted. */
+  public async previewSalary(input: unknown): Promise<SalaryBreakdown> {
+    const body = requireObject(input);
+    const parsed = await validateProfileInput(
+      Object.fromEntries(Object.entries(body).filter(([k]) => (SALARY_FIELDS as readonly string[]).includes(k)))
     );
-
-    const newDocs = Array.from(enrolledMap.entries())
-      .filter(([code]) => !existingCodes.has(code))
-      .map(([code, info]) => ({
-        empCode: code,
-        name: info.name,
-        location: info.location,
-        otEligible: true,
-        status: 'active' as const,
-        updatedAt: new Date().toISOString(),
-      }));
-
-    if (newDocs.length > 0) {
-      await EmployeeModel.insertMany(newDocs, { ordered: false }).catch((err) => {
-        console.warn('[EmployeeMasterService] Could not insert newly discovered employees:', err.message);
-      });
-    }
+    const breakdown = computeSalaryBreakdown(parsed as any);
+    if (!breakdown) throw ApiError.rule('Monthly CTC must be greater than zero to compute a salary breakdown.');
+    return breakdown;
   }
 
-  /**
-   * Get single employee profile by code. Auto-provisions a baseline profile
-   * the first time a known biometric employee is looked up.
-   */
-  public async getProfile(empCode: string): Promise<EmployeeProfile | null> {
-    this.assertDbConnected();
-
-    const existing = await EmployeeModel.findOne({ empCode }).lean();
-    if (existing) return toProfile(existing);
-
-    const inOut = await InOutModel.findOne({ employeeCode: empCode }).lean();
-    const raw = inOut ? null : await AttendanceModel.findOne({ employeeCode: empCode }).lean();
-    const source: any = inOut || raw;
-    if (!source) return null;
-
-    const created = await EmployeeModel.findOneAndUpdate(
-      { empCode },
-      {
-        $setOnInsert: {
-          empCode,
-          name: source.employeeName || `Employee ${empCode}`,
-          location: source.sourceId || 'Budigere',
-          otEligible: true,
-          status: 'active',
-          updatedAt: new Date().toISOString(),
-        },
-      },
-      { upsert: true, new: true }
-    ).lean();
-
-    return toProfile(created);
-  }
-
-  /**
-   * Update employee profile (DOB, Email, Monthly CTC, Annexure K Breakdown, Bank details, etc.)
-   */
-  public async updateProfile(empCode: string, input: EmployeeProfileUpdateInput): Promise<EmployeeProfile> {
-    this.assertDbConnected();
-
-    let existing = await this.getProfile(empCode);
-    if (!existing) {
-      existing = {
-        empCode,
-        name: `Employee ${empCode}`,
-        otEligible: true,
-        status: 'active',
-      };
-    }
-
-    const ctc = input.monthlyCtc !== undefined && input.monthlyCtc !== null && Number(input.monthlyCtc) > 0
-      ? Number(input.monthlyCtc)
-      : existing.monthlyCtc;
-
-    let basicSalary = input.basicSalary;
-    let fixedSalary = input.fixedSalary;
-    let hra = input.hra;
-    let specialAllowance = input.specialAllowance;
-    let grossSalary = input.grossSalary;
-    let employeePf = input.employeePf;
-    let employeeEsic = input.employeeEsic;
-    let totalNetSalary = input.totalNetSalary;
-    let employerPf = input.employerPf;
-    let employerEsic = input.employerEsic;
-    let professionalTax = input.professionalTax;
-    let minimumBonus = input.minimumBonus ?? existing.minimumBonus ?? 0;
-
-    // Auto-calculate Annexure K CTC breakdown if monthly CTC is provided
-    if (ctc && ctc > 0) {
-      if (basicSalary === undefined) basicSalary = Math.round(ctc * 0.50);
-      if (fixedSalary === undefined) fixedSalary = basicSalary;
-      if (hra === undefined) hra = Math.round(ctc * 0.20);
-      if (employerPf === undefined) employerPf = Math.min(1800, Math.round(basicSalary * 0.12));
-      if (professionalTax === undefined) professionalTax = ctc >= 15000 ? 200 : 0;
-      if (employerEsic === undefined) employerEsic = ctc <= 21000 ? Math.round(ctc * 0.0325) : 0;
-
-      if (employeePf === undefined) employeePf = employerPf;
-      if (employeeEsic === undefined) employeeEsic = ctc <= 21000 ? Math.round(ctc * 0.0075) : 0;
-
-      if (grossSalary === undefined) {
-        grossSalary = ctc - employerPf - employerEsic - professionalTax;
-      }
-
-      if (specialAllowance === undefined) {
-        specialAllowance = Math.max(0, grossSalary - basicSalary - (input.da ?? existing.da ?? 0) - (input.otherAllowance ?? existing.otherAllowance ?? 0) - hra);
-      }
-
-      if (totalNetSalary === undefined) {
-        totalNetSalary = grossSalary - employeePf - employeeEsic;
-      }
-    }
-
-    const updated: EmployeeProfile = {
-      ...existing,
-      ...input,
-      monthlyCtc: ctc,
-      annualCtc: ctc ? ctc * 12 : undefined,
-      basicSalary,
-      da: input.da !== undefined && input.da !== null ? Number(input.da) : existing.da,
-      fixedSalary,
-      hra,
-      specialAllowance,
-      otherAllowance: input.otherAllowance !== undefined && input.otherAllowance !== null ? Number(input.otherAllowance) : existing.otherAllowance,
-      grossSalary,
-      employeePf,
-      employeeEsic,
-      totalNetSalary,
-      employerPf,
-      employerEsic,
-      professionalTax,
-      minimumBonus,
-      otEligible: input.otEligible !== undefined ? input.otEligible : existing.otEligible,
-      otRatePerHour: input.otRatePerHour !== undefined ? Number(input.otRatePerHour) : existing.otRatePerHour,
+  public async createProfile(input: unknown): Promise<EmployeeProfile> {
+    requireDb();
+    const body = requireObject(input);
+    const empCode = normalizeEmpCode(body.empCode);
+    if (!isValidEmpCode(empCode)) throw ApiError.validation('A valid employee code is required.', [{ field: 'empCode', issue: 'Invalid' }]);
+    if (await EmployeeModel.exists({ empCode })) throw ApiError.conflict(`Employee ${empCode} already exists.`);
+    const { empCode: _ignored, ...rest } = body;
+    const fields = await validateProfileInput(rest);
+    if (!fields.name) throw ApiError.validation('Employee name is required.', [{ field: 'name', issue: 'Required' }]);
+    const salary = computeSalaryBreakdown(fields as any);
+    const doc = await EmployeeModel.create({
+      ...fields,
+      ...(salary ? salary : {}),
+      empCode,
+      otEligible: fields.otEligible ?? true,
+      status: fields.status ?? 'active',
       updatedAt: new Date().toISOString(),
-    };
-
-    await EmployeeModel.findOneAndUpdate({ empCode }, { $set: updated }, { upsert: true, new: true });
-    return updated;
+    });
+    this.invalidateCaches();
+    return toProfile(doc.toObject());
   }
+
+  /** Whitelisted update. Salary fields recompute through the single formula. */
+  public async updateProfile(empCode: string, input: unknown): Promise<EmployeeProfile> {
+    requireDb();
+    const code = normalizeEmpCode(empCode);
+    const existing = await EmployeeModel.findOne({ empCode: code }).lean();
+    if (!existing) throw ApiError.notFound(`Employee ${code} not found.`);
+    const fields = await validateProfileInput(input);
+
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, ''> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if ((SALARY_FIELDS as readonly string[]).includes(k)) continue;
+      if (v === undefined || v === null) $unset[k] = '';
+      else $set[k] = v;
+    }
+
+    const touchesSalary = Object.keys(fields).some((k) => (SALARY_FIELDS as readonly string[]).includes(k));
+    if (touchesSalary) {
+      // Merge stored salary inputs with the new ones; derived values are recomputed, not trusted.
+      const merged: Record<string, unknown> = {};
+      for (const k of SALARY_FIELDS) merged[k] = (existing as any)[k];
+      for (const k of SALARY_FIELDS) if (k in fields) merged[k] = (fields as any)[k];
+      // A changed CTC invalidates previously derived components that were not explicitly re-sent.
+      if ('monthlyCtc' in fields) {
+        for (const k of SALARY_FIELDS) if (k !== 'monthlyCtc' && !(k in fields)) merged[k] = undefined;
+      }
+      const breakdown = computeSalaryBreakdown(merged as any);
+      if (!breakdown) {
+        for (const k of [...SALARY_FIELDS, 'annualCtc', 'fixedSalary', 'grossSalary', 'totalNetSalary']) $unset[k] = '';
+      } else {
+        const { rulesVersion: _v, ...vals } = breakdown;
+        Object.assign($set, vals);
+      }
+    }
+    $set.updatedAt = new Date().toISOString();
+
+    const update: Record<string, unknown> = { $set };
+    if (Object.keys($unset).length) update.$unset = $unset;
+    const updated = await EmployeeModel.findOneAndUpdate({ empCode: code }, update, { new: true }).lean();
+    this.invalidateCaches();
+    return toProfile(updated);
+  }
+
+  /**
+   * Creates baseline profiles for vendor employees seen during SYNC (never from a GET).
+   * Existing profiles are untouched.
+   */
+  public async ensureProfiles(entries: Array<{ empCode: string; name: string; siteId?: string }>): Promise<number> {
+    requireDb();
+    const unique = new Map<string, { empCode: string; name: string; siteId?: string }>();
+    for (const e of entries) if (e.empCode && isValidEmpCode(e.empCode) && !unique.has(e.empCode)) unique.set(e.empCode, e);
+    if (unique.size === 0) return 0;
+    const res = await EmployeeModel.bulkWrite(
+      Array.from(unique.values()).map((e) => ({
+        updateOne: {
+          filter: { empCode: e.empCode },
+          update: {
+            $setOnInsert: {
+              empCode: e.empCode,
+              name: e.name || `Employee ${e.empCode}`,
+              location: e.siteId?.toLowerCase(),
+              otEligible: true,
+              status: 'active',
+              updatedAt: new Date().toISOString(),
+            },
+          },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    if (res.upsertedCount) this.invalidateCaches();
+    return res.upsertedCount || 0;
+  }
+
+  public isValidMonth = isValidBusinessMonth;
 }
 
 export const employeeMasterService = new EmployeeMasterService();

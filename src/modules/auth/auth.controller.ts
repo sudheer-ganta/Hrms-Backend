@@ -1,112 +1,73 @@
 import { Request, Response } from 'express';
 import { authService } from './auth.service.js';
 import { AuthRequest } from '../../middleware/auth.middleware.js';
+import { handle } from '../../utils/apiError.js';
+import { requireNonEmptyString, requireObject } from '../../utils/validate.js';
 
 export class AuthController {
-  /**
-   * POST /api/auth/login
-   */
-  public async login(req: Request, res: Response): Promise<void> {
-    try {
-      const { email, identifier, password } = req.body;
-      const targetId = identifier || email;
+  /** POST /api/auth/login */
+  public login = handle(async (req: Request, res: Response) => {
+    const body = requireObject(req.body);
+    const identifier = requireNonEmptyString(body.identifier ?? body.email, 'identifier', 254);
+    const password = requireNonEmptyString(body.password, 'password', 128);
+    const result = await authService.login(identifier, password);
+    res.json({ success: true, data: result });
+  });
 
-      if (!targetId || !password) {
-        res.status(400).json({ success: false, message: 'Email or Employee Code and password are required.' });
-        return;
-      }
-
-      const result = await authService.login(targetId, password);
-      res.json({ success: true, data: result });
-    } catch (err: any) {
-      res.status(401).json({ success: false, message: err.message || 'Login failed.' });
-    }
-  }
-
-  /**
-   * GET /api/auth/me
-   */
-  public async getMe(req: AuthRequest, res: Response): Promise<void> {
+  /** GET /api/auth/me: the CURRENT user from the database (not stale token claims). */
+  public getMe = handle(async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: req.user });
-  }
+  });
 
-  /**
-   * POST /api/auth/create-user (Super Admin only)
-   */
-  public async createUser(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      const { email, name, password, role, empCode } = req.body;
-      if (!email || !password || !role) {
-        res.status(400).json({ success: false, message: 'Email, password, and role are required.' });
-        return;
-      }
+  /** POST /api/auth/logout: revokes all sessions of the caller. */
+  public logout = handle(async (req: AuthRequest, res: Response) => {
+    await authService.revokeSessions(req.user!.id);
+    res.json({ success: true, data: { loggedOut: true } });
+  });
 
-      const user = await authService.createUser(
-        { email, name, password, role, empCode },
-        req.user?.role || 'EMPLOYEE'
-      );
+  /** POST /api/auth/change-password */
+  public changePassword = handle(async (req: AuthRequest, res: Response) => {
+    const body = requireObject(req.body);
+    const result = await authService.changePassword(
+      req.user!.id,
+      requireNonEmptyString(body.currentPassword, 'currentPassword', 128),
+      requireNonEmptyString(body.newPassword, 'newPassword', 128)
+    );
+    res.json({ success: true, data: result });
+  });
 
-      res.status(201).json({ success: true, data: user, message: 'User created successfully.' });
-    } catch (err: any) {
-      res.status(400).json({ success: false, message: err.message || 'Failed to create user.' });
-    }
-  }
+  /** POST /api/auth/users (Super Admin) */
+  public createUser = handle(async (req: AuthRequest, res: Response) => {
+    const body = requireObject(req.body);
+    const user = await authService.createUser({
+      email: requireNonEmptyString(body.email, 'email', 254),
+      name: typeof body.name === 'string' ? body.name : undefined,
+      password: requireNonEmptyString(body.password, 'password', 128),
+      role: body.role as 'FOUNDER' | 'EMPLOYEE',
+      empCode: typeof body.empCode === 'string' ? body.empCode : undefined,
+    });
+    res.status(201).json({ success: true, data: user });
+  });
 
-  /**
-   * GET /api/auth/users (Super Admin only)
-   */
-  public async getAllUsers(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      const users = await authService.getAllUsers(req.user?.role || 'EMPLOYEE');
-      res.json({ success: true, data: users });
-    } catch (err: any) {
-      res.status(403).json({ success: false, message: err.message });
-    }
-  }
+  public getAllUsers = handle(async (_req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await authService.getAllUsers() });
+  });
 
-  /**
-   * DELETE /api/auth/users/:id (Super Admin only)
-   */
-  public async deleteUser(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      await authService.deleteUser(id, req.user?.role || 'EMPLOYEE');
-      res.json({ success: true, message: 'User account deleted successfully.' });
-    } catch (err: any) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
+  public deleteUser = handle(async (req: AuthRequest, res: Response) => {
+    await authService.deleteUser(String(req.params.id), req.user!.id);
+    res.json({ success: true, data: { deleted: true } });
+  });
 
-  /**
-   * POST /api/auth/users/:id/toggle-status (Super Admin only)
-   */
-  public async toggleStatus(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const updated = await authService.toggleStatus(id, req.user?.role || 'EMPLOYEE');
-      res.json({ success: true, data: updated, message: `User status changed to ${updated.status}.` });
-    } catch (err: any) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
+  public toggleStatus = handle(async (req: AuthRequest, res: Response) => {
+    const updated = await authService.toggleStatus(String(req.params.id), req.user!.id);
+    res.json({ success: true, data: updated });
+  });
 
-  /**
-   * POST /api/auth/users/:id/reset-password (Super Admin only)
-   */
-  public async resetPassword(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const { newPassword } = req.body;
-      if (!newPassword || newPassword.length < 4) {
-        res.status(400).json({ success: false, message: 'Password must be at least 4 characters.' });
-        return;
-      }
-      await authService.resetPassword(id, newPassword, req.user?.role || 'EMPLOYEE');
-      res.json({ success: true, message: 'Password reset successfully.' });
-    } catch (err: any) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
+  public resetPassword = handle(async (req: AuthRequest, res: Response) => {
+    const body = requireObject(req.body);
+    await authService.resetPassword(String(req.params.id), requireNonEmptyString(body.newPassword, 'newPassword', 128));
+    res.json({ success: true, data: { reset: true } });
+  });
 }
 
 export const authController = new AuthController();

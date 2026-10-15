@@ -1,51 +1,40 @@
 import { Request, Response } from 'express';
-import { policyService } from './policy.service.js';
-import { payrollService } from '../payroll/payroll.service.js';
+import { policyService, getShiftStandardHours, isOvernightShift, lateThresholdMinutes } from './policy.service.js';
+import { minutesToHhmm } from '../../utils/istTime.js';
+import { payrollRunService } from '../payroll/payrollRun.service.js';
+import { handle, ApiError } from '../../utils/apiError.js';
+import { monthOf } from '../../utils/istTime.js';
+import { requireObject } from '../../utils/validate.js';
+import { validateHolidayInput } from './policy.service.js';
 
 export class PolicyController {
-  public static getSettings(req: Request, res: Response): void {
-    try {
-      const settings = policyService.getSettings();
-      res.json({ success: true, data: settings });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message || 'Failed to retrieve settings' });
-    }
-  }
+  public getSettings = handle(async (_req: Request, res: Response) => {
+    const p = policyService.getSettings();
+    // Derived values are computed here so no client ever re-implements the shift math.
+    res.json({ success: true, data: { ...p, derived: { standardDayHours: getShiftStandardHours(p.shift), overnightShift: isOvernightShift(p.shift), lateAfter: minutesToHhmm(lateThresholdMinutes(p.shift) % 1440) } } });
+  });
 
-  public static async updateSettings(req: Request, res: Response): Promise<void> {
-    try {
-      const updated = await policyService.updateSettings(req.body);
-      // OT hours/day, shift and holiday policy feed payroll: don't serve the cached snapshot.
-      payrollService.invalidateAllPayrollCache();
-      res.json({ success: true, data: updated, message: 'Policy settings updated successfully' });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message || 'Failed to update settings' });
-    }
-  }
+  /**
+   * Policy changes apply to OPEN months only. Closed months keep the frozen snapshot, so a policy
+   * edit can never alter them; payroll reads the new policy when a month is (re)calculated.
+   */
+  public updateSettings = handle(async (req: Request, res: Response) => {
+    const updated = await policyService.updateSettings(req.body);
+    res.json({ success: true, data: updated });
+  });
 
-  public static async addHoliday(req: Request, res: Response): Promise<void> {
-    try {
-      const { date, name, type } = req.body;
-      if (!date || !name) {
-        res.status(400).json({ success: false, error: 'Date and holiday name are required' });
-        return;
-      }
-      const holiday = await policyService.addHoliday({ date, name, type: type || 'NATIONAL' });
-      payrollService.invalidateAllPayrollCache();
-      res.json({ success: true, data: holiday, message: 'Holiday added successfully' });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message || 'Failed to add holiday' });
-    }
-  }
+  public addHoliday = handle(async (req: Request, res: Response) => {
+    const input = validateHolidayInput(requireObject(req.body));
+    await payrollRunService.assertMonthOpen(monthOf(input.date), 'Adding this holiday');
+    res.status(201).json({ success: true, data: await policyService.addHoliday(input) });
+  });
 
-  public static async removeHoliday(req: Request, res: Response): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      await policyService.removeHoliday(id);
-      payrollService.invalidateAllPayrollCache();
-      res.json({ success: true, message: 'Holiday removed successfully' });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message || 'Failed to remove holiday' });
-    }
-  }
+  public removeHoliday = handle(async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const existing = policyService.findHoliday(id);
+    if (!existing) throw ApiError.notFound('Holiday not found.');
+    await payrollRunService.assertMonthOpen(monthOf(existing.date), 'Removing this holiday');
+    await policyService.removeHoliday(id);
+    res.json({ success: true, data: { removed: true } });
+  });
 }

@@ -1,3 +1,25 @@
+export interface PayslipLine {
+  code: string;
+  label: string;
+  amount: number;
+  /** Informational detail (e.g. "3 days"). */
+  note?: string;
+}
+
+/**
+ * The payslip is produced by the backend and rendered as-is by the UI:
+ *   sum(earnings) - sum(deductions) = netPay      (always, by construction)
+ * `employerBorne` lines are shown for information only and are NOT part of the equation.
+ */
+export interface PayslipBreakdown {
+  earnings: PayslipLine[];
+  deductions: PayslipLine[];
+  employerBorne: PayslipLine[];
+  totalEarnings: number;
+  totalDeductions: number;
+  netPay: number;
+}
+
 export interface EmployeePayrollSummary {
   empCode: string;
   name: string;
@@ -7,59 +29,84 @@ export interface EmployeePayrollSummary {
   doj?: string;
   department?: string;
   designation?: string;
-  location?: string;
-  
-  // Attendance & Time Breakdown
+  location?: string; // canonical siteId
+  siteId?: string;
+
+  // Lifecycle
+  payrollStatus: 'LIVE' | 'CLOSED';
+  isProvisional: boolean; // true while the month is still open (figures can change)
+  snapshotVersion?: number;
+  rulesVersion: string;
+
+  // Attendance & time breakdown (all from the attendance resolver)
   month: string; // YYYY-MM
-  monthDays: number; // Total calendar days in the target month (e.g. 30 for September)
-  elapsedDays: number; // Days elapsed so far this month (equals monthDays for a past/closed month)
-  presentDays: number;
+  monthDays: number;
+  elapsedDays: number;
+  presentDays: number;     // PRESENT + WFH + OD + MISSED_PUNCH
   halfDays: number;
-  absentDays: number;
-  lopDays: number;
+  absentDays: number;      // ABSENT
+  leaveDays: number;       // paid leave
+  unpaidLeaveDays: number;
+  missedPunchDays: number;
+  wfhDays: number;
+  onDutyDays: number;
+  lopDays: number;         // absent + unpaid leave + halfDays * halfDayLopFraction
   payableDays: number;
   weeklyOffs: number;
   holidays: number;
   totalWorkHours: number;
-  totalOtHours: number; // Overtime hours (hours beyond standard 8h/day)
+  totalOtHours: number;
   lateArrivals: number;
 
-  // Earnings Breakdown (₹)
+  // Earnings (₹)
   monthlyCtc: number;
   basicSalary: number;
   hra: number;
-  allowances: number;
-  grossSalary?: number; // Gross Monthly Salary (D) = Basic + HRA + Special Allowance
-  da?: number; // Dearness Allowance (OT wage base component only)
-  otWageBase?: number; // Basic + DA — base for OT and Sunday pay
-  otDailyWage?: number; // otWageBase / 26 (display)
-  otHourlyWage?: number; // otWageBase / 26 / hoursPerDay (display, before multiplier)
-  otHoursPerDay?: number; // Global OT policy standard hours/day (default 8)
-  otEligible?: boolean;
-  otMultiplier?: number; // Effective OT multiplier applied
+  allowances: number; // special allowance
+  grossSalary: number;
+  da: number;
+  otherAllowance: number;
+  otWageBase: number;
+  otDailyWage: number;
+  otHourlyWage: number;
+  otHoursPerDay: number;
+  otEligible: boolean;
+  otMultiplier: number;
   otRatePerHour: number;
-  otEarnings: number; // Calculated Overtime pay
-  sundayDays?: number; // Sundays worked (fractional allowed)
-  sundayEarnings?: number; // (Basic + DA) / 26 x 2 x sundayDays
-  grossEarnings: number; // Basic + HRA + Allowances + OT
+  otEarnings: number;
+  /** Days worked on a weekly off / paid holiday that payroll prices (effective = HR override if present, else the resolver's). */
+  weeklyOffWorkDays: number;
+  holidayWorkDays: number;
+  /** What the attendance resolver recognized under policy.offDayWork, before any HR override. */
+  weeklyOffWorkAutoDays: number;
+  holidayWorkAutoDays: number;
+  offDayWorkOverridden: boolean;
+  weeklyOffWorkEarnings: number;
+  holidayWorkEarnings: number;
+  /** @deprecated only present on rows frozen before the weekly-off / holiday split. */
+  sundayDays?: number;
+  sundayEarnings?: number;
+  grossEarnings: number; // accrued earnings for elapsed days + OT + weekly-off / holiday work
 
-  // Statutory & Company Contributions (₹)
-  employerPf?: number; // Employer Contribution to PF (H) (e.g. ₹1,800)
-  employerEsic?: number; // Employer Contribution to ESIC (I)
+  // Statutory & employer contributions (₹)
+  employerPf: number;
+  employerEsic: number;
 
-  // Deductions Breakdown (₹)
-  lopDeduction: number; // Deducted for absent/unpaid days
-  pfDeduction: number; // Employee Provident Fund (E)
-  esiDeduction: number; // Employee ESI (F)
-  ptDeduction: number; // Professional Tax (J)
-  totalDeductions: number;
+  // Deductions (₹)
+  lopDeduction: number;
+  pfDeduction: number;
+  esiDeduction: number;
+  ptDeduction: number;       // PT amount for the month (employer-borne unless payroll rules say otherwise)
+  ptDeductedFromNet: boolean;
+  totalDeductions: number;   // lop + pf + esi (+ pt when ptDeductedFromNet)
 
-  // Final Net Pay (₹)
-  totalNetSalary?: number; // Net Salary before PT (G) = Gross - Employee PF/ESI
+  // Final pay
+  totalNetSalary: number;
   netPayable: number;
   netPayableWords: string;
 
-  // Payment Channel
+  payslip: PayslipBreakdown;
+
   bankAccount?: string;
   ifscCode?: string;
   bankName?: string;
@@ -68,14 +115,13 @@ export interface EmployeePayrollSummary {
 
 export interface SendPayslipRequest {
   empCode: string;
-  month: string; // YYYY-MM
+  month: string;
   recipientEmail?: string;
-  customMessage?: string;
 }
 
 export interface SendPayslipResponse {
   success: boolean;
   message: string;
-  previewUrl?: string;
   sentTo: string;
+  previewHtml?: string;
 }

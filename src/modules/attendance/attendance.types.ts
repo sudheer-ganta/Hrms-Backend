@@ -1,15 +1,27 @@
 import { Document } from 'mongoose';
+import { AttendanceOrigin } from './attendanceStatus.js';
 
+/**
+ * RawPunch: an immutable fact that "employee E was at/with source S at instant T".
+ * Biometric (DEVICE) and ESS web punches are both raw punches. Nothing edits them.
+ */
 export interface IAttendanceRecord {
-  sourceId: string;
+  sourceId: string;            // vendor account / site the punch came from
   sourceName: string;
-  employeeCode: string;
+  siteId?: string;             // canonical site
+  employeeCode: string;        // canonical (normalized) employee code
+  vendorEmployeeCode?: string; // code as the vendor knows it
   employeeName: string;
-  punchDateTime: Date;
-  entryDate: string; // YYYY-MM-DD
-  entryTime: string; // HH:mm:ss
+  punchDateTime: Date;         // the instant (UTC)
+  entryDate: string;           // business date (IST) YYYY-MM-DD
+  entryTime: string;           // IST wall clock HH:mm:ss
   machineId: string;
   machineFlag: string | null;
+  origin: AttendanceOrigin;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  meta?: Record<string, unknown>;
   syncedAt: Date;
   vendorRecordHash: string;
   createdAt?: Date;
@@ -25,6 +37,7 @@ export interface AttendanceQueryFilters {
   employeeCode?: string;
   search?: string;
   machineId?: string;
+  origin?: string;
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -33,59 +46,5 @@ export interface AttendanceQueryFilters {
 
 export interface AttendancePaginationResult {
   data: IAttendanceRecord[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 }
-
-export interface HourlyPunchDistribution {
-  hour: string;
-  punches: number;
-  label: string;
-}
-
-export interface AttendanceStatusBreakdown {
-  present: number;
-  absent: number;
-  halfDay: number;
-  weeklyOff: number;
-  total: number;
-  presentPct: number;
-  absentPct: number;
-  halfDayPct: number;
-}
-
-export interface DashboardStatsResult {
-  selectedDate: string;
-  totalWorkforce: number;          // Total enrolled employees in roster
-  presentCount: number;            // Present employees on selected date
-  absentCount: number;             // Absent employees on selected date
-  lateArrivalsCount: number;       // Late arrivals (after 9:30 AM)
-  halfDayCount: number;            // Half-day records
-  attendanceRate: number;          // Attendance % (e.g. 86)
-  absenteeismRate: number;         // Absenteeism % (e.g. 14)
-  todayPunches: number;            // Raw biometric punch volume on date
-  totalRecords: number;            // Total system records
-  todayActiveEmployees: number;    // Compatibility field
-  lastSyncAt: Date | null;
-  locationBreakdown: {
-    sourceId: string;
-    sourceName: string;
-    totalWorkforce: number;
-    presentCount: number;
-    absentCount: number;
-    totalPunches: number;
-    todayPunches: number;
-    activeEmployeesToday: number;
-    attendanceRate: number;
-    lastSyncStatus?: string;
-    lastSyncAt?: Date | null;
-  }[];
-  hourlyDistribution: HourlyPunchDistribution[];
-  statusBreakdown: AttendanceStatusBreakdown;
-  recentPunches: IAttendanceRecord[];
-}
-

@@ -2,74 +2,46 @@ import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware.js';
 import { payrollRunService } from './payrollRun.service.js';
 import { payrollService } from './payroll.service.js';
+import { handle } from '../../utils/apiError.js';
+import { requireMonth, requireObject, optionalString } from '../../utils/validate.js';
+import { ApiError } from '../../utils/apiError.js';
 
-const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const actor = (req: AuthRequest) => req.user?.name || req.user?.email || 'Unknown';
 
 export class PayrollRunController {
-  public getStatus = async (req: AuthRequest, res: Response) => {
-    try {
-      const month = String(req.params.month);
-      if (!MONTH_PATTERN.test(month)) {
-        return res.status(400).json({ success: false, error: 'Month must be in YYYY-MM format' });
-      }
-      const status = await payrollRunService.getRunStatus(month);
-      res.json({ success: true, data: status });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public getStatus = handle(async (req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await payrollRunService.getRunStatus(requireMonth(req.params.month)) });
+  });
 
-  public listRuns = async (req: AuthRequest, res: Response) => {
-    try {
-      const runs = await payrollRunService.listRuns();
-      res.json({ success: true, data: runs });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  };
+  public listRuns = handle(async (_req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await payrollRunService.listRuns() });
+  });
 
-  public closeMonth = async (req: AuthRequest, res: Response) => {
-    try {
-      const month = String(req.params.month);
-      if (!MONTH_PATTERN.test(month)) {
-        return res.status(400).json({ success: false, error: 'Month must be in YYYY-MM format' });
-      }
-      const closedBy = req.user?.name || req.user?.email || 'Unknown';
+  public listVersions = handle(async (req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: await payrollRunService.listVersions(requireMonth(req.params.month)) });
+  });
 
-      // Compute live figures for every employee one last time, then lock them in.
-      const snapshot = await payrollService.calculateAllEmployeesPayroll(month);
-      const run = await payrollRunService.closeMonth(month, snapshot, closedBy);
+  public getVersion = handle(async (req: AuthRequest, res: Response) => {
+    const version = Number(req.params.version);
+    if (!Number.isInteger(version) || version < 1) throw ApiError.validation('version must be a positive integer.', [{ field: 'version', issue: 'Invalid' }]);
+    res.json({ success: true, data: await payrollRunService.getVersion(requireMonth(req.params.month), version) });
+  });
 
-      res.json({
-        success: true,
-        message: `${month} payroll closed and locked by ${closedBy}.`,
-        data: run,
-      });
-    } catch (err: any) {
-      res.status(400).json({ success: false, error: err.message });
-    }
-  };
+  /** Close = calculate → validate → freeze as a new immutable snapshot version. */
+  public closeMonth = handle(async (req: AuthRequest, res: Response) => {
+    const month = requireMonth(req.params.month);
+    if (await payrollRunService.isClosed(month)) throw ApiError.conflict(`${month} is already closed. Reopen it first.`);
+    const snapshot = await payrollService.calculateAllEmployeesPayroll(month, { forceLive: true });
+    const run = await payrollRunService.closeMonth(month, snapshot, actor(req));
+    res.json({ success: true, data: run });
+  });
 
-  public reopenMonth = async (req: AuthRequest, res: Response) => {
-    try {
-      const month = String(req.params.month);
-      if (!MONTH_PATTERN.test(month)) {
-        return res.status(400).json({ success: false, error: 'Month must be in YYYY-MM format' });
-      }
-      const reopenedBy = req.user?.name || req.user?.email || 'Unknown';
-
-      const run = await payrollRunService.reopenMonth(month, reopenedBy);
-      payrollService.invalidateAllPayrollCache(month);
-
-      res.json({
-        success: true,
-        message: `${month} payroll reopened by ${reopenedBy}. It's back to live calculation until you close it again.`,
-        data: run,
-      });
-    } catch (err: any) {
-      res.status(400).json({ success: false, error: err.message });
-    }
-  };
+  public reopenMonth = handle(async (req: AuthRequest, res: Response) => {
+    const month = requireMonth(req.params.month);
+    const body = requireObject(req.body ?? {});
+    const run = await payrollRunService.reopenMonth(month, actor(req), optionalString(body.reason, 'reason', 500) ?? '');
+    res.json({ success: true, data: run });
+  });
 }
 
 export const payrollRunController = new PayrollRunController();

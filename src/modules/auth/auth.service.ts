@@ -1,263 +1,195 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserModel, UserDocument } from './user.model.js';
-import { AuthResponse, CreateUserInput, IUser, UserRole } from './auth.types.js';
-import { employeeMasterService } from '../employees/employeeMaster.service.js';
+import { AuthResponse, CreateUserInput, IUser } from './auth.types.js';
+import { ENV } from '../../config/env.js';
+import { ApiError } from '../../utils/apiError.js';
+import { normalizeEmpCode, isValidEmpCode } from '../../utils/empCode.js';
+import { assertStrongPassword } from '../../utils/password.js';
+import { requireDb } from '../../config/db.js';
 
-// No fallback on purpose: running with a hardcoded, source-visible secret
-// would let anyone with read access to this code forge a valid login token
-// for any account, including Super Admin. Fail loudly at startup instead.
-if (!process.env.JWT_SECRET) {
-  throw new Error(
-    'JWT_SECRET environment variable is not set. Generate one with:\n' +
-    '  node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"\n' +
-    'and add it to your .env file before starting the server.'
-  );
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export interface TokenClaims {
+  id: string;
+  tv: number;
 }
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = '7d';
+
+const toDto = (u: UserDocument | any): IUser => ({
+  id: String(u._id),
+  email: u.email,
+  name: u.name,
+  role: u.role,
+  empCode: u.empCode || undefined,
+  status: u.status,
+  createdAt: u.createdAt,
+});
 
 export class AuthService {
-  private seeded = false;
-
   /**
-   * Auto-seed ONLY the initial Super Admin account
+   * First-run bootstrap ONLY. Creates the initial SUPER_ADMIN from environment
+   * variables when no super admin exists at all. It never recreates, resets or
+   * deletes anything afterwards, and ships no default credentials.
    */
-  public async ensureSeedUsers(): Promise<void> {
-    if (this.seeded) return;
-    try {
-      // 1. Remove any legacy mock/demo users
-      await UserModel.deleteMany({
-        email: { $in: ['founder@colormyles.com', 'sudheer@colormyles.com'] }
-      });
-
-      // 2. Super Admin Account
-      const superAdminEmail = 'gmsaisudheer@gmail.com';
-      const existingSuperAdmin = await UserModel.findOne({
-        email: { $in: [superAdminEmail, 'gmsaisudheer@gmail'] }
-      });
-
-      if (!existingSuperAdmin) {
-        const passwordHash = await bcrypt.hash('gmsaisudheer@gmail', 10);
-        await UserModel.create({
-          email: superAdminEmail,
-          passwordHash,
-          name: 'Sai Sudheer (Super Admin)',
-          role: 'SUPER_ADMIN',
-          status: 'active',
-        });
-        console.log(`👑 Super Admin account initialized: ${superAdminEmail}`);
-      }
-
-      this.seeded = true;
-    } catch (err) {
-      console.warn('[AuthService] Error during user seed:', err);
+  public async bootstrapSuperAdmin(): Promise<void> {
+    if (!ENV.SEED_SUPERADMIN_EMAIL || !ENV.SEED_SUPERADMIN_PASSWORD) return;
+    const existing = await UserModel.exists({ role: 'SUPER_ADMIN' });
+    if (existing) {
+      console.warn('[Auth] SEED_SUPERADMIN_* is set but a super admin already exists. Remove these variables from the environment.');
+      return;
     }
+    assertStrongPassword(ENV.SEED_SUPERADMIN_PASSWORD, ENV.SEED_SUPERADMIN_EMAIL);
+    await UserModel.create({
+      email: ENV.SEED_SUPERADMIN_EMAIL,
+      passwordHash: await bcrypt.hash(ENV.SEED_SUPERADMIN_PASSWORD, 12),
+      name: ENV.SEED_SUPERADMIN_NAME,
+      role: 'SUPER_ADMIN',
+      status: 'active',
+    });
+    console.warn(`[Auth] Initial SUPER_ADMIN created: ${ENV.SEED_SUPERADMIN_EMAIL}. Remove SEED_SUPERADMIN_* from the environment now.`);
   }
 
-  /**
-   * Generate JWT Token
-   */
   public generateToken(user: UserDocument): string {
-    const payload = {
-      id: user._id.toString(),
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      empCode: user.empCode,
-    };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const claims: TokenClaims = { id: String(user._id), tv: user.tokenVersion || 0 };
+    return jwt.sign(claims, ENV.JWT_SECRET, { expiresIn: ENV.JWT_EXPIRES_IN } as jwt.SignOptions);
   }
 
-  /**
-   * Verify JWT Token
-   */
-  public verifyToken(token: string): any {
+  public verifyToken(token: string): TokenClaims | null {
     try {
-      return jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, ENV.JWT_SECRET) as any;
+      if (!decoded?.id) return null;
+      return { id: String(decoded.id), tv: Number(decoded.tv ?? 0) };
     } catch {
       return null;
     }
   }
 
-  /**
-   * User Login (Supports Email OR Employee Code)
-   */
-  public async login(identifier: string, password: string): Promise<AuthResponse> {
-    await this.ensureSeedUsers();
-
-    const cleanIdentifier = identifier.trim().toLowerCase();
-    
-    // Find by email or empCode
-    let user = await UserModel.findOne({
-      $or: [
-        { email: cleanIdentifier },
-        { email: `${cleanIdentifier}@gmail.com` },
-        { empCode: identifier.trim() }
-      ]
-    });
-
-    // Super Admin shorthand check
-    if (!user && (cleanIdentifier === 'gmsaisudheer@gmail' || cleanIdentifier === 'gmsaisudheer')) {
-      user = await UserModel.findOne({ role: 'SUPER_ADMIN' });
-    }
-
-    if (!user) {
-      throw new Error('Invalid email, employee ID or password.');
-    }
-
-    if (user.status !== 'active') {
-      throw new Error('This account has been deactivated. Please contact Super Admin.');
-    }
-
-    // Verify Password
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isMatch) {
-      throw new Error('Invalid email, employee ID or password.');
-    }
-
-    const token = this.generateToken(user);
-
-    return {
-      token,
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        empCode: user.empCode,
-        status: user.status,
-      },
-    };
+  /** Loads the CURRENT user for a token and enforces status + revocation. */
+  public async authenticateToken(token: string): Promise<IUser | null> {
+    const claims = this.verifyToken(token);
+    if (!claims) return null;
+    requireDb();
+    const user = await UserModel.findById(claims.id).lean();
+    if (!user || user.status !== 'active') return null;
+    if ((user.tokenVersion || 0) !== claims.tv) return null;
+    return toDto(user);
   }
 
-  /**
-   * Create Founder or Employee Account (Super Admin only)
-   */
-  public async createUser(input: CreateUserInput, requesterRole: UserRole): Promise<IUser> {
-    if (requesterRole !== 'SUPER_ADMIN') {
-      throw new Error('Access denied: Only Super Admin can create user accounts.');
+  public async login(identifier: string, password: string): Promise<AuthResponse> {
+    requireDb();
+    const id = String(identifier || '').trim();
+    const invalid = () => ApiError.unauthenticated('Invalid email, employee ID or password.');
+    if (!id || !password) throw invalid();
+
+    const user = EMAIL_RE.test(id)
+      ? await UserModel.findOne({ email: id.toLowerCase() })
+      : isValidEmpCode(id)
+      ? await UserModel.findOne({ empCode: normalizeEmpCode(id) })
+      : null;
+
+    // Always run a bcrypt compare so unknown users and wrong passwords cost the same.
+    const hash = user?.passwordHash || '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali';
+    const ok = await bcrypt.compare(password, hash).catch(() => false);
+    if (!user || !ok) throw invalid();
+    if (user.status !== 'active') throw ApiError.forbidden('This account has been deactivated. Please contact the Super Admin.');
+
+    return { token: this.generateToken(user), user: toDto(user) };
+  }
+
+  public async createUser(input: CreateUserInput): Promise<IUser> {
+    requireDb();
+    const email = String(input.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) throw ApiError.validation('A valid email is required.', [{ field: 'email', issue: 'Invalid email' }]);
+    if (!(['FOUNDER', 'HR', 'EMPLOYEE'] as string[]).includes(input.role)) {
+      throw ApiError.validation('Role must be FOUNDER, HR, or EMPLOYEE.', [{ field: 'role', issue: 'Invalid role' }]);
+    }
+    const empCode = input.empCode ? normalizeEmpCode(input.empCode) : undefined;
+    if (input.role === 'EMPLOYEE' && (!empCode || !isValidEmpCode(empCode))) {
+      throw ApiError.validation('A valid employee code is required for Employee accounts.', [{ field: 'empCode', issue: 'Required' }]);
+    }
+    assertStrongPassword(input.password, email, empCode);
+
+    if (await UserModel.exists({ email })) throw ApiError.conflict(`An account with email ${email} already exists.`);
+    if (empCode && (await UserModel.exists({ empCode }))) throw ApiError.conflict(`An account is already linked to employee code ${empCode}.`);
+
+    let name = String(input.name || '').trim();
+    if (input.role === 'EMPLOYEE' && empCode) {
+      // Lazy import avoids a module cycle (employee service depends on attendance models).
+      const { employeeMasterService } = await import('../employees/employeeMaster.service.js');
+      const profile = await employeeMasterService.findProfile(empCode);
+      if (!profile) throw ApiError.rule(`Employee ${empCode} does not exist in the employee master. Create or sync the employee first.`);
+      if (!name) name = profile.name;
     }
 
-    const cleanEmail = input.email.trim().toLowerCase();
-    const existing = await UserModel.findOne({ email: cleanEmail });
-    if (existing) {
-      throw new Error(`An account with email ${cleanEmail} already exists.`);
-    }
-
-    let finalName = input.name.trim();
-
-    // If Employee, verify empCode and auto-fetch profile name
-    if (input.role === 'EMPLOYEE') {
-      if (!input.empCode) {
-        throw new Error('Employee code is required for Employee accounts.');
-      }
-      const existingEmpCode = await UserModel.findOne({ empCode: input.empCode.trim() });
-      if (existingEmpCode) {
-        throw new Error(`An account is already linked to Employee Code #${input.empCode}.`);
-      }
-      const profile = await employeeMasterService.getProfile(input.empCode.trim());
-      if (profile && !finalName) {
-        finalName = profile.name;
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(input.password, 10);
-    const newUser = await UserModel.create({
-      email: cleanEmail,
-      passwordHash,
-      name: finalName || (input.role === 'FOUNDER' ? 'Founder' : `Employee ${input.empCode}`),
+    const created = await UserModel.create({
+      email,
+      passwordHash: await bcrypt.hash(input.password, 12),
+      name: name || (input.role === 'FOUNDER' ? 'Founder' : input.role === 'HR' ? 'HR' : `Employee ${empCode}`),
       role: input.role,
-      empCode: input.empCode ? input.empCode.trim() : undefined,
+      empCode,
       status: 'active',
     });
+    return toDto(created);
 
-    return {
-      _id: newUser._id.toString(),
-      email: newUser.email,
-      name: newUser.name,
-      role: newUser.role,
-      empCode: newUser.empCode,
-      status: newUser.status,
-      createdAt: newUser.createdAt,
-    };
   }
 
-  /**
-   * List all user accounts (Super Admin only)
-   */
-  public async getAllUsers(requesterRole: UserRole): Promise<IUser[]> {
-    if (requesterRole !== 'SUPER_ADMIN') {
-      throw new Error('Access denied: Only Super Admin can view user accounts.');
-    }
-    await this.ensureSeedUsers();
-
-    const users = await UserModel.find({}, '-passwordHash').sort({ createdAt: -1 });
-    return users.map(u => ({
-      _id: u._id.toString(),
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      empCode: u.empCode,
-      status: u.status,
-      createdAt: u.createdAt,
-    }));
+  public async getAllUsers(): Promise<IUser[]> {
+    requireDb();
+    const users = await UserModel.find({}, '-passwordHash').sort({ createdAt: -1 }).lean();
+    return users.map(toDto);
   }
 
-  /**
-   * Delete user account (Super Admin only)
-   */
-  public async deleteUser(userId: string, requesterRole: UserRole): Promise<boolean> {
-    if (requesterRole !== 'SUPER_ADMIN') {
-      throw new Error('Access denied: Only Super Admin can delete users.');
-    }
+  public async deleteUser(userId: string, actingUserId: string): Promise<void> {
+    requireDb();
     const user = await UserModel.findById(userId);
-    if (!user) throw new Error('User not found.');
-    if (user.role === 'SUPER_ADMIN') {
-      throw new Error('Cannot delete the root Super Admin account.');
-    }
+    if (!user) throw ApiError.notFound('User not found.');
+    if (String(user._id) === actingUserId) throw ApiError.rule('You cannot delete your own account.');
+    if (user.role === 'SUPER_ADMIN') throw ApiError.rule('A Super Admin account cannot be deleted.');
     await UserModel.findByIdAndDelete(userId);
-    return true;
   }
 
-  /**
-   * Toggle user active status (Super Admin only)
-   */
-  public async toggleStatus(userId: string, requesterRole: UserRole): Promise<IUser> {
-    if (requesterRole !== 'SUPER_ADMIN') {
-      throw new Error('Access denied.');
-    }
+  public async toggleStatus(userId: string, actingUserId: string): Promise<IUser> {
+    requireDb();
     const user = await UserModel.findById(userId);
-    if (!user) throw new Error('User not found.');
-    if (user.role === 'SUPER_ADMIN') throw new Error('Cannot modify Super Admin status.');
-
+    if (!user) throw ApiError.notFound('User not found.');
+    if (String(user._id) === actingUserId) throw ApiError.rule('You cannot change your own status.');
+    if (user.role === 'SUPER_ADMIN') throw ApiError.rule('A Super Admin account cannot be deactivated.');
     user.status = user.status === 'active' ? 'inactive' : 'active';
+    user.tokenVersion = (user.tokenVersion || 0) + 1; // revoke existing sessions immediately
     await user.save();
-
-    return {
-      _id: user._id.toString(),
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      empCode: user.empCode,
-      status: user.status,
-    };
+    return toDto(user);
   }
 
-  /**
-   * Reset user password (Super Admin only)
-   */
-  public async resetPassword(userId: string, newPass: string, requesterRole: UserRole): Promise<boolean> {
-    if (requesterRole !== 'SUPER_ADMIN') {
-      throw new Error('Access denied.');
-    }
+  /** Admin reset. Revokes all sessions of the target user. */
+  public async resetPassword(userId: string, newPassword: string): Promise<void> {
+    requireDb();
     const user = await UserModel.findById(userId);
-    if (!user) throw new Error('User not found.');
-
-    user.passwordHash = await bcrypt.hash(newPass, 10);
+    if (!user) throw ApiError.notFound('User not found.');
+    assertStrongPassword(newPassword, user.email, user.empCode);
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
-    return true;
+  }
+
+  /** Self-service change; returns a fresh token because the old one is revoked. */
+  public async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<AuthResponse> {
+    requireDb();
+    const user = await UserModel.findById(userId);
+    if (!user) throw ApiError.unauthenticated();
+    if (!(await bcrypt.compare(String(currentPassword || ''), user.passwordHash))) {
+      throw ApiError.validation('Current password is incorrect.', [{ field: 'currentPassword', issue: 'Incorrect' }]);
+    }
+    assertStrongPassword(newPassword, user.email, user.empCode);
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+    return { token: this.generateToken(user), user: toDto(user) };
+  }
+
+  /** Revokes every token issued to this user ("log out everywhere"). */
+  public async revokeSessions(userId: string): Promise<void> {
+    requireDb();
+    await UserModel.updateOne({ _id: userId }, { $inc: { tokenVersion: 1 } });
   }
 }
 

@@ -1,32 +1,28 @@
-export type UserRole = 'SUPER_ADMIN' | 'FOUNDER' | 'EMPLOYEE';
+export const USER_ROLES = ['SUPER_ADMIN', 'FOUNDER', 'HR', 'EMPLOYEE'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+export type UserStatus = 'active' | 'inactive';
 
+/** Canonical user DTO returned by login, /auth/me and user management. */
 export interface IUser {
-  _id?: string;
+  id: string;
   email: string;
   name: string;
   role: UserRole;
-  empCode?: string; // Present if role === 'EMPLOYEE'
-  status: 'active' | 'inactive';
+  empCode?: string;
+  status: UserStatus;
   createdAt?: Date;
-  updatedAt?: Date;
 }
 
 export interface AuthResponse {
   token: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    role: UserRole;
-    empCode?: string;
-    status: 'active' | 'inactive';
-  };
+  user: IUser;
 }
 
 export interface CreateUserInput {
   email: string;
-  name: string;
+  name?: string;
   password: string;
-  role: 'FOUNDER' | 'EMPLOYEE';
+  role: 'FOUNDER' | 'HR' | 'EMPLOYEE';
   empCode?: string;
 }
+

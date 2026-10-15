@@ -1,21 +1,23 @@
 import { Router } from 'express';
-import { AttendanceController } from './attendance.controller.js';
-import { InOutController } from './inOut.controller.js';
-import { optionalAuth, requireAuth } from '../../middleware/auth.middleware.js';
+import { attendanceController as AttendanceController } from './attendance.controller.js';
+import { access } from '../../middleware/auth.middleware.js';
 
 const router = Router();
 
-// Raw Punches & Swipes
-router.get('/', AttendanceController.getAttendance);
-router.get('/raw-swipes', AttendanceController.getRawSwipes);
-router.get('/stats', AttendanceController.getDashboardStats);
+// EMPLOYEE_SELF: employees see only their own attendance; admins see everyone.
+router.get('/days', ...access.EMPLOYEE_SELF, AttendanceController.getDays);
+router.get('/calendar', ...access.EMPLOYEE_SELF, AttendanceController.getCalendar);
+router.get('/punch/today', ...access.EMPLOYEE_SELF, AttendanceController.getTodayPunchStatus);
+router.post('/punch', ...access.EMPLOYEE_SELF, AttendanceController.recordPunch);
 
-// Processed Daily Attendance (Check-in, Check-out, Working Hours, Overtime, Status)
-router.get('/in-out', InOutController.getInOutAttendance);
-router.get('/timesheet', InOutController.getTimesheet);
-
-// Employee Geotagged Punch (Check-In / Check-Out with Server IST Enforcement)
-router.get('/punch/today', optionalAuth, AttendanceController.getTodayPunchStatus);
-router.post('/punch', optionalAuth, AttendanceController.recordPunch);
+// HR_OR_ABOVE: timesheet, raw swipes, stats, recompute, manual day adjustments
+router.get('/raw-swipes', ...access.HR_OR_ABOVE, AttendanceController.getRawPunches);
+router.get('/timesheet', ...access.HR_OR_ABOVE, AttendanceController.getTimesheet);
+router.get('/stats', ...access.HR_OR_ABOVE, AttendanceController.getDashboardStats);
+router.post('/recompute', ...access.HR_OR_ABOVE, AttendanceController.recompute);
+router.post('/adjust', ...access.HR_OR_ABOVE, AttendanceController.adjustDay);
+router.post('/adjust/revoke', ...access.HR_OR_ABOVE, AttendanceController.revokeAdjustment);
+router.post('/adjust/:id/revoke', ...access.HR_OR_ABOVE, AttendanceController.revokeAdjustment);
 
 export default router;
+

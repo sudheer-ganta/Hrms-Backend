@@ -7,20 +7,15 @@ import employeeRouter from '../modules/employees/employeeMaster.routes.js';
 import payrollRouter from '../modules/payroll/payroll.routes.js';
 import requestsRouter from '../modules/requests/requests.routes.js';
 import authRouter from '../modules/auth/auth.routes.js';
-import { getDbStatus } from '../config/database.js';
+import { isDbConnected } from '../config/db.js';
 
 const router = Router();
 
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    database: getDbStatus(),
-  });
+// PUBLIC: minimal liveness only (no URIs, no internals)
+router.get('/health', (_req, res) => {
+  res.status(isDbConnected() ? 200 : 503).json({ success: isDbConnected(), data: { status: isDbConnected() ? 'ok' : 'degraded', database: { connected: isDbConnected() } } });
 });
 
-// Mounted modules
 router.use('/auth', authRouter);
 router.use('/sources', sourcesRouter);
 router.use('/attendance', attendanceRouter);

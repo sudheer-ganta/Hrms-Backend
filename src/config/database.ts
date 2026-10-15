@@ -32,7 +32,7 @@ const attachEventListeners = (): void => {
   mongoose.connection.on('connected', () => {
     isConnected = true;
     isConnecting = false;
-    console.log('✅ MongoDB Connected to Atlas successfully');
+    console.log('MongoDB connected');
   });
 
   mongoose.connection.on('error', (err) => {
@@ -50,7 +50,7 @@ const attachEventListeners = (): void => {
   });
 
   mongoose.connection.on('reconnected', () => {
-    console.log('🔄 MongoDB Reconnected to Atlas');
+    console.log('MongoDB reconnected');
     isConnected = true;
     isConnecting = false;
   });
@@ -79,7 +79,6 @@ export const connectDatabase = async (): Promise<boolean> => {
       maxPoolSize: 25,
       minPoolSize: 2,
       heartbeatFrequencyMS: 10000,
-      family: 4, // Force IPv4 to eliminate Windows/ISP DNS resolution delays
       retryWrites: true,
       retryReads: true,
     });
@@ -95,11 +94,4 @@ export const connectDatabase = async (): Promise<boolean> => {
     scheduleReconnect();
     return false;
   }
-};
-
-export const getDbStatus = (): { connected: boolean; uri: string } => {
-  return {
-    connected: mongoose.connection.readyState === 1,
-    uri: ENV.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'),
-  };
 };

@@ -1,19 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
+import { sendError, ApiError, errorBody } from '../utils/apiError.js';
 
-export const errorHandler = (
-  err: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
-  console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.message || err);
+/** Central error handler: every error leaves the API in the canonical shape. */
+export const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction): void => {
+  sendError(res, err);
+};
 
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-
-  res.status(statusCode).json({
-    success: false,
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
+/** Unknown /api route → canonical 404 (not Express HTML). */
+export const apiNotFound = (_req: Request, res: Response): void => {
+  const e = ApiError.notFound('API route not found.');
+  res.status(e.statusCode).json(errorBody(e.code, e.message));
 };

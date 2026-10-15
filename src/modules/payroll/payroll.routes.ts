@@ -1,29 +1,29 @@
 import { Router } from 'express';
 import { payrollController } from './payroll.controller.js';
 import { payrollRunController } from './payrollRun.controller.js';
-import { requireAuth, requireRole } from '../../middleware/auth.middleware.js';
+import { access } from '../../middleware/auth.middleware.js';
 
 const router = Router();
 
-router.get('/all', payrollController.getAllPayroll);
-router.get('/employee/:empCode', payrollController.getEmployeePayroll);
-router.post('/send-payslip', payrollController.sendPayslip);
+// EMPLOYEE_SELF: an employee sees only their own payroll
+router.get('/employee/:empCode', ...access.EMPLOYEE_SELF, payrollController.getEmployeePayroll);
 
-// Overtime & Payroll Adjustments — these edit/reveal individual pay figures,
-// so (like payroll close/reopen below) they require an authenticated
-// Super Admin / Founder, and the real user's identity is what gets recorded
-// in the permanent audit trail for save/clear actions.
-router.get('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.getAdjustments);
-router.post('/preview/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.previewPayroll);
-router.post('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.saveAdjustments);
-router.delete('/adjustments/:month', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.clearAdjustments);
-router.get('/adjustments/:month/history', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollController.getAdjustmentHistory);
+// HR_OR_ABOVE: company payroll, adjustments, payslip emails, month close
+router.get('/all', ...access.HR_OR_ABOVE, payrollController.getAllPayroll);
+router.post('/send-payslip', ...access.HR_OR_ABOVE, payrollController.sendPayslip);
 
-// Monthly payroll closing (locking a permanent snapshot) is a consequential,
-// audit-worthy action, so only Super Admin / Founder can close or reopen a month.
-router.get('/runs', requireAuth, payrollRunController.listRuns);
-router.get('/runs/:month', requireAuth, payrollRunController.getStatus);
-router.post('/runs/:month/close', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollRunController.closeMonth);
-router.post('/runs/:month/reopen', requireAuth, requireRole(['SUPER_ADMIN', 'FOUNDER']), payrollRunController.reopenMonth);
+router.post('/preview/:month', ...access.HR_OR_ABOVE, payrollController.previewPayroll);
+router.get('/adjustments/:month', ...access.HR_OR_ABOVE, payrollController.getAdjustments);
+router.post('/adjustments/:month', ...access.HR_OR_ABOVE, payrollController.saveAdjustments);
+router.delete('/adjustments/:month', ...access.HR_OR_ABOVE, payrollController.clearAdjustments);
+router.get('/adjustments/:month/history', ...access.HR_OR_ABOVE, payrollController.getAdjustmentHistory);
+
+router.get('/runs', ...access.HR_OR_ABOVE, payrollRunController.listRuns);
+router.get('/runs/:month', ...access.HR_OR_ABOVE, payrollRunController.getStatus);
+router.get('/runs/:month/versions', ...access.HR_OR_ABOVE, payrollRunController.listVersions);
+router.get('/runs/:month/versions/:version', ...access.HR_OR_ABOVE, payrollRunController.getVersion);
+router.post('/runs/:month/close', ...access.HR_OR_ABOVE, payrollRunController.closeMonth);
+// Reopening a closed payroll is the most consequential payroll action: SUPER_ADMIN only.
+router.post('/runs/:month/reopen', ...access.SUPER_ADMIN_ONLY, payrollRunController.reopenMonth);
 
 export default router;

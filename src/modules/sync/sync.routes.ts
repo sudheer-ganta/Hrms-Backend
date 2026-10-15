@@ -1,23 +1,22 @@
 import { Router } from 'express';
-import { SyncController } from './sync.controller.js';
-import { InOutController } from '../attendance/inOut.controller.js';
+import { syncController } from './sync.controller.js';
+import { access } from '../../middleware/auth.middleware.js';
 
 const router = Router();
+// FOUNDER_OR_SUPER_ADMIN for everything under /sync
+router.use(...access.FOUNDER_OR_SUPER_ADMIN);
 
-// API 2: Punch Data MCID
-router.post('/all', SyncController.syncAllSources);
-router.post('/:sourceId', SyncController.syncSingleSource);
+// Raw punches (vendor API 2)
+router.post('/all', syncController.syncRawAll);
+// Daily IN/OUT (vendor API 3); declared before '/:sourceId' so "in-out" is never read as a source id
+router.post('/in-out/all', syncController.syncInOutAll);
+router.post('/in-out/:sourceId', syncController.syncInOutOne);
+router.post('/:sourceId', syncController.syncRawOne);
 
-// API 3: IN/OUT Attendance Data
-router.post('/in-out/all', InOutController.syncAllSourcesInOut);
-router.post('/in-out/:sourceId', InOutController.syncSingleSourceInOut);
+router.get('/logs', syncController.getSyncLogs);
 
-// Logs
-router.get('/logs', SyncController.getSyncLogs);
-
-// Background Auto-Sync Scheduler
-router.get('/scheduler/status', SyncController.getSchedulerStatus);
-router.post('/scheduler/toggle', SyncController.toggleScheduler);
-router.post('/scheduler/trigger-now', SyncController.triggerSchedulerNow);
+router.get('/scheduler/status', syncController.getSchedulerStatus);
+router.post('/scheduler/toggle', syncController.toggleScheduler);
+router.post('/scheduler/trigger-now', syncController.triggerSchedulerNow);
 
 export default router;

@@ -1,7 +1,6 @@
 import { Document } from 'mongoose';
 
 export type SyncStatus = 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED';
-
 export type SyncType = 'RAW' | 'INOUT';
 
 export interface ISyncLog {
@@ -24,15 +23,18 @@ export interface ISyncLog {
 
 export interface SyncLogDocument extends ISyncLog, Document {}
 
+/** Result of syncing ONE source. Identical shape for RAW and INOUT. */
 export interface SyncSummaryResult {
   success: boolean;
   sourceId: string;
   source: string;
+  syncType: SyncType;
   fetched: number;
   inserted: number;
   duplicates: number;
   status: SyncStatus;
   logId?: string;
   durationMs: number;
+  note?: string;
   error?: string;
 }

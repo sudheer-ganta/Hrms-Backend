@@ -1,371 +1,198 @@
-import { InOutModel } from './inOut.model.js';
 import { AttendanceModel } from './attendance.model.js';
-import { localStore } from '../../config/localStore.js';
+import { attendanceDayService } from './attendanceDay.service.js';
 import { employeeMasterService } from '../employees/employeeMaster.service.js';
-import { policyService } from '../settings/policy.service.js';
-import { IInOutRecord } from './inOut.types.js';
-import { IAttendanceRecord } from './attendance.types.js';
-import mongoose from 'mongoose';
+import { policyService, isOvernightShift } from '../settings/policy.service.js';
+import { siteService, matchSiteByGeo } from '../sites/site.service.js';
+import { payrollRunService } from '../payroll/payrollRun.service.js';
+import { ApiError } from '../../utils/apiError.js';
+import { requireDb } from '../../config/db.js';
+import { normalizeEmpCode } from '../../utils/empCode.js';
+import { addDays, businessDateFromInstant, istTimeFromInstant, istTimeWithSecondsFromInstant } from '../../utils/istTime.js';
+import { createRawPunchHash } from '../../utils/hashUtils.js';
+import { requireObject, optionalNumber, optionalString } from '../../utils/validate.js';
 
-// Known Office Coordinates for Automatic Geofence Matching (Bangalore/ColorMyles Units)
-const KNOWN_OFFICE_LOCATIONS = [
-  { name: 'ColorMyles HQ', lat: 12.9716, lng: 77.5946, radiusMeters: 800 },
-  { name: 'Budigere Unit', lat: 13.0673, lng: 77.7420, radiusMeters: 800 },
-  { name: 'Bidarahalli Unit', lat: 13.0310, lng: 77.7080, radiusMeters: 800 },
-];
+const MIN_GAP_SECONDS = 60;      // double-tap protection
+const MAX_ACCURACY_M = 300;      // GPS fix worse than this is rejected when geofencing is enforced
+const OPEN_SESSION_MAX_HOURS = 20;
 
-/**
- * Calculates distance between two GPS coordinates in meters using Haversine formula
- */
-function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth radius in meters
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
-  const deltaPhi = toRad(lat2 - lat1);
-  const deltaLambda = toRad(lon2 - lon1);
+export type PunchType = 'IN' | 'OUT' | 'AUTO';
 
-  const a =
-    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-}
-
-export interface PunchInput {
+export interface PunchStatusDTO {
   empCode: string;
-  empName?: string;
-  punchType?: 'IN' | 'OUT' | 'AUTO';
-  latitude?: number;
-  longitude?: number;
-  accuracy?: number;
-  address?: string;
-  deviceInfo?: string;
-}
-
-export interface PunchResult {
-  success: boolean;
-  action: 'CHECKED_IN' | 'CHECKED_OUT';
-  empCode: string;
-  empName: string;
-  serverISTDate: string;
-  serverISTTime: string;
-  inTime: string;
-  outTime: string;
-  workTime: string;
+  businessDate: string;
+  serverTimeIst: string;
+  checkedIn: boolean;
+  checkedOut: boolean;
+  nextAction: 'IN' | 'OUT';
+  firstIn: string | null;
+  lastOut: string | null;
   workMinutes: number;
-  status: string;
+  status: string | null;
   statusLabel: string;
-  locationTag: string;
+  inProgress: boolean;
+  geofence: { mode: 'ENFORCE' | 'OFF'; configured: boolean };
+}
+
+export interface PunchResultDTO extends PunchStatusDTO {
+  action: 'CHECKED_IN' | 'CHECKED_OUT';
+  siteId: string | null;
+  geofenceResult: 'INSIDE' | 'OVERRIDDEN' | 'NOT_ENFORCED';
   message: string;
 }
 
-export class PunchService {
-  /**
-   * Strictly resolves the authoritative current Date and Time in Indian Standard Time (IST)
-   */
-  public getServerISTNow(): { isoDate: string; timeStr: string; fullTimeStr: string; timestamp: Date } {
-    const now = new Date();
+class PunchService {
+  private async geofenceInfo() {
+    const sites = await siteService.getSites();
+    return { sites, configured: sites.some((s) => s.active && !!s.geo) };
+  }
 
-    // Indian Standard Time (UTC+5:30)
-    const istDateFormatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-
-    const istTimeFormatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    const istFullTimeFormatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-
-    return {
-      isoDate: istDateFormatter.format(now), // "YYYY-MM-DD"
-      timeStr: istTimeFormatter.format(now), // "HH:mm"
-      fullTimeStr: istFullTimeFormatter.format(now), // "HH:mm:ss"
-      timestamp: now,
-    };
+  /** Raw ESS/device punches for the business date, oldest first. */
+  private async punchesOn(empCode: string, businessDate: string) {
+    return AttendanceModel.find({ employeeCode: empCode, entryDate: businessDate }).sort({ punchDateTime: 1 }).lean();
   }
 
   /**
-   * Resolves location description based on GPS coordinates and office geofences
+   * Which business date does a punch (or a status lookup) at `now` belong to?
+   * Normally the IST calendar date. For an OVERNIGHT shift an OUT after midnight belongs to the
+   * business date of the still-open IN from the evening before; a fresh IN starts a new session.
    */
-  public resolveLocationTag(latitude?: number, longitude?: number, accuracy?: number, customAddress?: string): string {
-    if (latitude !== undefined && longitude !== undefined && !isNaN(latitude) && !isNaN(longitude)) {
-      for (const office of KNOWN_OFFICE_LOCATIONS) {
-        const dist = calculateDistanceMeters(latitude, longitude, office.lat, office.lng);
-        if (dist <= office.radiusMeters) {
-          return `${office.name} (On-Premises • ${Math.round(dist)}m from center)`;
-        }
-      }
-
-      const accText = accuracy ? ` ±${Math.round(accuracy)}m` : '';
-      if (customAddress && customAddress.trim()) {
-        return `${customAddress.trim()} (${latitude.toFixed(4)}, ${longitude.toFixed(4)}${accText})`;
-      }
-      return `Field / Remote Location (${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E${accText})`;
-    }
-
-    return 'Web ESS Portal (Manual Geolocation Unavailable)';
+  private async businessDateFor(empCode: string, now: Date, mode: 'STATUS' | PunchType = 'STATUS'): Promise<string> {
+    const today = businessDateFromInstant(now);
+    if (!isOvernightShift(policyService.getSettings().shift)) return today;
+    if ((await this.punchesOn(empCode, today)).length > 0) return today;
+    const prev = addDays(today, -1);
+    const prevPunches = await this.punchesOn(empCode, prev);
+    const last = prevPunches[prevPunches.length - 1] as any;
+    if (!last) return today;
+    const ageH = (now.getTime() - new Date(last.punchDateTime).getTime()) / 3_600_000;
+    if (ageH < 0 || ageH > OPEN_SESSION_MAX_HOURS) return today;
+    const open = last.machineFlag === 'IN';
+    if (mode === 'IN') return today; // a new IN is always a new session
+    if (open) return prev; // OUT / AUTO / status continue the open session
+    // session already closed: only an explicit OUT shortly after (a later checkout), or a status lookup, stays on it
+    if (mode === 'OUT' && ageH <= 4) return prev;
+    if (mode === 'STATUS' && ageH <= 12) return prev;
+    return today;
   }
 
-  /**
-   * Fetch today's punch status for an employee
-   */
-  public async getTodayStatus(empCode: string): Promise<any> {
-    const { isoDate, timeStr, fullTimeStr } = this.getServerISTNow();
-    const cleanCode = empCode.trim().toUpperCase();
-    const isDbConnected = mongoose.connection.readyState === 1;
-
-    let existingRecord: any = null;
-    if (isDbConnected) {
-      try {
-        existingRecord = await InOutModel.findOne({
-          employeeCode: cleanCode,
-          date: isoDate,
-        }).lean();
-      } catch (err) {
-        console.warn('DB error fetching today punch status:', err);
-      }
-    }
-
-    if (!existingRecord) {
-      const localRecords = localStore.getInOutRecords();
-      existingRecord = localRecords.find((r) => r.employeeCode === cleanCode && r.date === isoDate);
-    }
-
-    const inTime = existingRecord?.inTime && existingRecord.inTime !== '--:--' ? existingRecord.inTime : null;
-    const outTime = existingRecord?.outTime && existingRecord.outTime !== '--:--' ? existingRecord.outTime : null;
-
-    const checkedIn = Boolean(inTime);
-    const checkedOut = Boolean(outTime && outTime !== inTime);
-
-    return {
-      empCode: cleanCode,
-      serverISTDate: isoDate,
-      serverISTTime: timeStr,
-      serverISTFullTime: fullTimeStr,
-      checkedIn,
-      checkedOut,
-      inTime: inTime || '--:--',
-      outTime: outTime || '--:--',
-      workTime: existingRecord?.workTime || '00:00',
-      workMinutes: existingRecord?.workMinutes || 0,
-      status: existingRecord?.status || (checkedIn ? 'P' : 'A'),
-      statusLabel: existingRecord?.statusLabel || (checkedIn ? 'Present' : 'Not Punched Today'),
-      remark: existingRecord?.remark || '',
-      sourceName: existingRecord?.sourceName || 'Web / Mobile ESS',
-    };
-  }
-
-  /**
-   * Records an employee check-in or check-out with server-enforced IST time and Geolocation
-   */
-  public async recordPunch(input: PunchInput): Promise<PunchResult> {
-    const { isoDate, timeStr, fullTimeStr, timestamp } = this.getServerISTNow();
-    const cleanCode = input.empCode.trim().toUpperCase();
-
-    // 1. Resolve employee name — a brief DB hiccup shouldn't block check-in/out,
-    // so fall back to a generic label rather than let a lookup failure here
-    // fail the whole punch.
-    let empName = input.empName?.trim();
-    if (!empName) {
-      try {
-        const profile = await employeeMasterService.getProfile(cleanCode);
-        empName = profile?.name || `Employee ${cleanCode}`;
-      } catch {
-        empName = `Employee ${cleanCode}`;
-      }
-    }
-
-    // 2. Resolve Geolocation Tag
-    const locationTag = this.resolveLocationTag(input.latitude, input.longitude, input.accuracy, input.address);
-
-    // 3. Check existing today's InOut record
-    const isDbConnected = mongoose.connection.readyState === 1;
-    let existingRecord: any = null;
-
-    if (isDbConnected) {
-      try {
-        existingRecord = await InOutModel.findOne({
-          employeeCode: cleanCode,
-          date: isoDate,
-        }).lean();
-      } catch (err) {
-        console.warn('DB error fetching existing record for punch:', err);
-      }
-    }
-
-    if (!existingRecord) {
-      const localRecords = localStore.getInOutRecords();
-      existingRecord = localRecords.find((r) => r.employeeCode === cleanCode && r.date === isoDate);
-    }
-
-    let action: 'CHECKED_IN' | 'CHECKED_OUT' = 'CHECKED_IN';
-    let inTime = existingRecord?.inTime && existingRecord.inTime !== '--:--' ? existingRecord.inTime : '--:--';
-    let outTime = existingRecord?.outTime && existingRecord.outTime !== '--:--' ? existingRecord.outTime : '--:--';
-
-    // 4. Determine action
-    if (input.punchType === 'IN') {
-      action = 'CHECKED_IN';
-      inTime = timeStr;
-    } else if (input.punchType === 'OUT') {
-      action = 'CHECKED_OUT';
-      outTime = timeStr;
-      if (inTime === '--:--') inTime = timeStr; // Fallback if no check-in was recorded
-    } else {
-      // AUTO mode
-      if (inTime === '--:--') {
-        action = 'CHECKED_IN';
-        inTime = timeStr;
-      } else {
-        action = 'CHECKED_OUT';
-        outTime = timeStr;
-      }
-    }
-
-    // 5. Calculate work duration
-    let workMinutes = 0;
-    if (inTime !== '--:--' && outTime !== '--:--') {
-      const [inH, inM] = inTime.split(':').map(Number);
-      const [outH, outM] = outTime.split(':').map(Number);
-      const startTotal = inH * 60 + inM;
-      const endTotal = outH * 60 + outM;
-      workMinutes = Math.max(0, endTotal - startTotal);
-    } else if (inTime !== '--:--') {
-      // Ongoing active shift
-      const [inH, inM] = inTime.split(':').map(Number);
-      const [curH, curM] = timeStr.split(':').map(Number);
-      workMinutes = Math.max(0, curH * 60 + curM - (inH * 60 + inM));
-    }
-
-    const workHours = Math.floor(workMinutes / 60);
-    const workMins = workMinutes % 60;
-    const workTime = `${String(workHours).padStart(2, '0')}:${String(workMins).padStart(2, '0')}`;
-
-    // 6. Policy Status Evaluation
+  public async getTodayStatus(empCodeInput: string, now: Date = new Date()): Promise<PunchStatusDTO> {
+    requireDb();
+    const empCode = normalizeEmpCode(empCodeInput);
+    const businessDate = await this.businessDateFor(empCode, now, 'STATUS');
+    const punches = await this.punchesOn(empCode, businessDate);
+    const { day } = await attendanceDayService.resolveOne(empCode, businessDate);
     const policy = policyService.getSettings();
-    const minCheckoutForFullDay = policy.shift?.minCheckoutForFullDay || '16:00';
-    const minMinutesForFullDay = policy.shift?.fullDayThresholdMinutes || 360;
-    const minMinutesForHalfDay = policy.shift?.halfDayThresholdMinutes || 180;
-
-    let status = 'P';
-    let statusLabel = 'Present';
-
-    if (action === 'CHECKED_OUT') {
-      if (outTime >= minCheckoutForFullDay || workMinutes >= minMinutesForFullDay) {
-        status = 'P';
-        statusLabel = 'Present (Full Day)';
-      } else if (workMinutes >= minMinutesForHalfDay) {
-        status = 'P/2';
-        statusLabel = 'Half Day';
-      } else {
-        status = 'P';
-        statusLabel = 'Present';
-      }
-    } else {
-      status = 'P';
-      statusLabel = 'Checked In (Active Shift)';
-    }
-
-    const sourceId = 'web-portal';
-    const recordKey = `${sourceId}_${cleanCode}_${isoDate}`;
-
-    const normalizedInOut: IInOutRecord = {
-      sourceId,
-      sourceName: 'Web / Mobile ESS',
-      employeeCode: cleanCode,
-      employeeName: empName,
-      date: isoDate,
-      inTime,
-      outTime,
-      workTime,
-      workMinutes,
-      overTime: '00:00',
-      breakTime: '00:00',
-      lateIn: '00:00',
-      earlyOut: '00:00',
-      status,
-      statusLabel,
-      remark: `${action === 'CHECKED_IN' ? 'Checked In' : 'Checked Out'} via ESS (${locationTag})`,
-      syncedAt: timestamp,
-      recordKey,
-    };
-
-    // 7. Save InOut Record
-    if (isDbConnected) {
-      try {
-        await InOutModel.findOneAndUpdate({ recordKey }, normalizedInOut, { upsert: true, new: true });
-      } catch (dbErr) {
-        console.warn('MongoDB InOut upsert failed, falling back to localStore:', dbErr);
-        localStore.upsertInOutRecords([normalizedInOut]);
-      }
-    } else {
-      localStore.upsertInOutRecords([normalizedInOut]);
-    }
-
-    // 8. Log Raw Punch Swipe
-    const rawRecordHash = `${cleanCode}_${isoDate}_${fullTimeStr}_${action}`;
-    const rawPunchRecord: IAttendanceRecord = {
-      sourceId,
-      sourceName: 'Web / Mobile ESS',
-      employeeCode: cleanCode,
-      employeeName: empName,
-      punchDateTime: timestamp,
-      entryDate: isoDate,
-      entryTime: fullTimeStr,
-      machineId: 'ESS_GEO_PORTAL',
-      machineFlag: action === 'CHECKED_IN' ? 'IN' : 'OUT',
-      vendorRecordHash: rawRecordHash,
-      syncedAt: timestamp,
-    };
-
-    if (isDbConnected) {
-      try {
-        await AttendanceModel.findOneAndUpdate({ vendorRecordHash: rawRecordHash }, rawPunchRecord, {
-          upsert: true,
-          new: true,
-        });
-      } catch (err) {
-        console.warn('MongoDB raw punch log failed:', err);
-        localStore.upsertRecords([rawPunchRecord]);
-      }
-    } else {
-      localStore.upsertRecords([rawPunchRecord]);
-    }
-
-    const message =
-      action === 'CHECKED_IN'
-        ? `Successfully Checked In at ${timeStr} IST! Have a productive day.`
-        : `Successfully Checked Out at ${timeStr} IST! Today's work duration: ${workTime}.`;
-
+    const geo = await this.geofenceInfo();
+    const count = punches.length;
     return {
-      success: true,
+      empCode,
+      businessDate,
+      serverTimeIst: istTimeWithSecondsFromInstant(now),
+      checkedIn: count >= 1 || !!day.firstIn,
+      checkedOut: !!day.lastOut && day.lastOut !== day.firstIn,
+      nextAction: count === 0 ? 'IN' : 'OUT',
+      firstIn: day.firstIn,
+      lastOut: day.lastOut,
+      workMinutes: day.workMinutes,
+      status: day.status,
+      statusLabel: day.statusLabel || 'Not punched today',
+      inProgress: day.inProgress,
+      geofence: { mode: policy.ess.geofenceMode, configured: geo.configured },
+    };
+  }
+
+  public async recordPunch(
+    input: unknown,
+    actor: { id: string; role: 'SUPER_ADMIN' | 'FOUNDER' | 'EMPLOYEE'; empCode?: string; name: string },
+    now: Date = new Date() // injectable clock (tests); production always uses the real time
+  ): Promise<PunchResultDTO> {
+    requireDb();
+    const body = requireObject(input);
+    const empCode = normalizeEmpCode(actor.role === 'EMPLOYEE' ? actor.empCode : body.empCode ?? actor.empCode);
+    if (!empCode) throw ApiError.validation('Employee code is required to record a punch.', [{ field: 'empCode', issue: 'Required' }]);
+
+    const punchType = (body.punchType ?? 'AUTO') as PunchType;
+    if (!['IN', 'OUT', 'AUTO'].includes(punchType)) throw ApiError.validation('punchType must be IN, OUT or AUTO.', [{ field: 'punchType', issue: 'Invalid value' }]);
+    const lat = optionalNumber(body.latitude, 'latitude', { min: -90, max: 90 });
+    const lng = optionalNumber(body.longitude, 'longitude', { min: -180, max: 180 });
+    const accuracy = optionalNumber(body.accuracy, 'accuracy', { min: 0, max: 100000 });
+    const note = optionalString(body.address ?? body.notes, 'address', 200);
+    const override = body.override === true;
+    if (override && actor.role === 'EMPLOYEE') throw ApiError.forbidden('Only an administrator can override the location check.');
+
+    const profile = await employeeMasterService.findProfile(empCode);
+    if (!profile) throw ApiError.notFound(`Employee ${empCode} not found.`);
+    if (profile.status !== 'active') throw ApiError.rule(`Employee ${empCode} is not active.`);
+
+    const businessDate = await this.businessDateFor(empCode, now, punchType);
+    await payrollRunService.assertMonthOpen(businessDate.slice(0, 7), 'Recording this punch');
+
+    // ---- geofence: a real rule, with an explicit admin override ----
+    const policy = policyService.getSettings();
+    const geo = await this.geofenceInfo();
+    let siteId: string | null = profile.location || null;
+    let geofenceResult: PunchResultDTO['geofenceResult'] = 'NOT_ENFORCED';
+    if (policy.ess.geofenceMode === 'ENFORCE' && geo.configured) {
+      if (lat === undefined || lng === undefined) {
+        if (!override) throw ApiError.rule('Your location is required to punch. Please allow location access and try again.');
+        geofenceResult = 'OVERRIDDEN';
+      } else {
+        if (accuracy !== undefined && accuracy > MAX_ACCURACY_M && !override) {
+          throw ApiError.rule(`Location accuracy is too low (±${Math.round(accuracy)}m). Move to an open area and try again.`);
+        }
+        const match = matchSiteByGeo(geo.sites, lat, lng);
+        if (match) { siteId = match.site.siteId; geofenceResult = 'INSIDE'; }
+        else if (override) geofenceResult = 'OVERRIDDEN';
+        else throw ApiError.rule('You are outside the allowed punch locations. Move to your office/unit, or ask an administrator.');
+      }
+    }
+
+    // ---- decide IN / OUT from the day's raw punches ----
+    const punches = await this.punchesOn(empCode, businessDate);
+    const last = punches[punches.length - 1] as any;
+    if (last && (now.getTime() - new Date(last.punchDateTime).getTime()) / 1000 < MIN_GAP_SECONDS) {
+      throw ApiError.conflict(`A punch was just recorded at ${istTimeFromInstant(new Date(last.punchDateTime))}. Please wait a minute.`);
+    }
+    let action: 'CHECKED_IN' | 'CHECKED_OUT';
+    if (punchType === 'IN') {
+      if (punches.length) throw ApiError.conflict(`Already checked in at ${istTimeFromInstant(new Date((punches[0] as any).punchDateTime))}.`);
+      action = 'CHECKED_IN';
+    } else if (punchType === 'OUT') {
+      if (!punches.length) throw ApiError.conflict('You have not checked in today.');
+      action = 'CHECKED_OUT';
+    } else {
+      action = punches.length ? 'CHECKED_OUT' : 'CHECKED_IN';
+    }
+
+    const entryDate = businessDateFromInstant(now);
+    const entryTime = istTimeWithSecondsFromInstant(now);
+    const sourceId = (siteId || 'unassigned').toLowerCase();
+    const hash = createRawPunchHash({ origin: 'ESS_WEB', sourceId, employeeCode: empCode, entryDate, entryTime, machineId: `ESS:${action}` });
+
+    // Raw punches are immutable facts: insert-only, idempotent on the hash.
+    await AttendanceModel.updateOne(
+      { vendorRecordHash: hash },
+      {
+        $setOnInsert: {
+          sourceId, sourceName: 'ESS Web', siteId: siteId || undefined, employeeCode: empCode, vendorEmployeeCode: empCode,
+          employeeName: profile.name, punchDateTime: now, entryDate: businessDate, entryTime, machineId: 'ESS',
+          machineFlag: action === 'CHECKED_IN' ? 'IN' : 'OUT', origin: 'ESS_WEB',
+          latitude: lat, longitude: lng, accuracy, syncedAt: now, vendorRecordHash: hash,
+          meta: { note, geofence: geofenceResult, punchedBy: actor.id, punchedByName: actor.name, userAgent: String(body.userAgent || '').slice(0, 200) || undefined },
+        },
+      },
+      { upsert: true }
+    );
+    await attendanceDayService.recompute(empCode, businessDate);
+
+    const status = await this.getTodayStatus(empCode, now);
+    const time = istTimeFromInstant(now);
+    return {
+      ...status,
       action,
-      empCode: cleanCode,
-      empName,
-      serverISTDate: isoDate,
-      serverISTTime: timeStr,
-      inTime,
-      outTime,
-      workTime,
-      workMinutes,
-      status,
-      statusLabel,
-      locationTag,
-      message,
+      siteId,
+      geofenceResult,
+      message: action === 'CHECKED_IN' ? `Checked in at ${time} IST.` : `Checked out at ${time} IST. Worked so far: ${Math.floor(status.workMinutes / 60)}h ${status.workMinutes % 60}m.`,
     };
   }
 }

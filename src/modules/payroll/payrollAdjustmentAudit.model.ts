@@ -8,6 +8,7 @@ export interface IPayrollAdjustmentAudit {
   performedAt: Date;
   previousAdjustments: Record<string, EmployeeOtAdjustment>;
   newAdjustments: Record<string, EmployeeOtAdjustment>;
+  reason?: string;
 }
 
 export interface PayrollAdjustmentAuditDocument extends IPayrollAdjustmentAudit, Document {}
@@ -25,6 +26,7 @@ const PayrollAdjustmentAuditSchema = new Schema<PayrollAdjustmentAuditDocument>(
     performedAt: { type: Date, required: true, default: Date.now, index: true },
     previousAdjustments: { type: Schema.Types.Mixed, default: {} },
     newAdjustments: { type: Schema.Types.Mixed, default: {} },
+    reason: { type: String },
   },
   {
     timestamps: true,

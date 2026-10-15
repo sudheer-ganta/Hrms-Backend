@@ -1,6 +1,11 @@
 import nodemailer from 'nodemailer';
 import { EmployeePayrollSummary } from './payroll.types.js';
 
+const esc = (v: unknown): string =>
+  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const maskTail = (v?: string) => (v ? `${'*'.repeat(Math.max(0, v.length - 4))}${v.slice(-4)}` : '');
+
 class EmailService {
   private transporter: any = null;
 
@@ -13,143 +18,70 @@ class EmailService {
     const port = Number(process.env.SMTP_PORT) || 587;
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
-
     if (host && user && pass) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass }
-      });
-      console.log('[EmailService] SMTP Transporter initialized successfully with:', host);
+      this.transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+      console.log('[EmailService] SMTP transporter initialized.');
     } else {
-      console.log('[EmailService] Running in simulation mode (set SMTP_HOST, SMTP_USER, SMTP_PASS in .env for live dispatch)');
+      console.log('[EmailService] Simulation mode (set SMTP_HOST, SMTP_USER, SMTP_PASS for live dispatch).');
     }
   }
 
-  /**
-   * Generates a sleek branded HTML email template for ColorMyles Payslip
-   */
-  private generatePayslipHtml(summary: EmployeePayrollSummary): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: 'Open Sans', Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
-          .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-          .header { background: #011638; padding: 24px; text-align: center; color: #ffffff; }
-          .header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-          .header p { margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; }
-          .content { padding: 24px; }
-          .badge { display: inline-block; background: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
-          .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
-          .stat-title { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-          .stat-value { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px; }
-          .salary-banner { background: linear-gradient(135deg, #1184b0, #011638); color: white; padding: 18px; border-radius: 10px; text-align: center; margin: 20px 0; }
-          .salary-banner .amt { font-size: 28px; font-weight: 800; }
-          .footer { background: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>ColorMyles HRMS</h1>
-            <p>Official Monthly Salary Payslip — ${summary.month}</p>
-          </div>
-          <div class="content">
-            <p>Dear <strong>${summary.name}</strong> (Emp ID: <strong>${summary.empCode}</strong>),</p>
-            <p>Your official salary computation for the month of <strong>${summary.month}</strong> is finalized. Below is a summary of your attendance and earnings:</p>
-            
-            <div class="grid">
-              <div class="stat-box">
-                <div class="stat-title">Month Days / Payable</div>
-                <div class="stat-value">${summary.monthDays} Days / ${summary.payableDays} Paid</div>
-              </div>
-              <div class="stat-box">
-                <div class="stat-title">Loss of Pay (LOP)</div>
-                <div class="stat-value" style="color: #ef4444;">${summary.lopDays} Days</div>
-              </div>
-              <div class="stat-box">
-                <div class="stat-title">Standard Work Hours</div>
-                <div class="stat-value">${summary.totalWorkHours} hrs</div>
-              </div>
-              <div class="stat-box">
-                <div class="stat-title">Overtime (OT) Logged</div>
-                <div class="stat-value" style="color: #10b981;">+${summary.totalOtHours} hrs (₹${summary.otEarnings})</div>
-              </div>
-              ${(summary.sundayEarnings ?? 0) > 0 ? `<div class="stat-box">
-                <div class="stat-title">Sunday Working</div>
-                <div class="stat-value" style="color: #10b981;">${summary.sundayDays} day(s) (₹${summary.sundayEarnings})</div>
-              </div>` : ''}
-            </div>
-
-            <div class="salary-banner">
-              <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">Net Payable Salary</div>
-              <div class="amt">₹${summary.netPayable.toLocaleString('en-IN')}</div>
-              <div style="font-size: 12px; margin-top: 4px; opacity: 0.85;">${summary.netPayableWords}</div>
-            </div>
-
-            <p style="font-size: 13px; color: #475569;">
-              <strong>Department:</strong> ${summary.department} | <strong>Location:</strong> ${summary.location}<br/>
-              ${summary.dob ? `<strong>DOB:</strong> ${summary.dob} | ` : ''}
-              ${summary.bankAccount ? `<strong>Bank A/C:</strong> ${summary.bankAccount}` : ''}
-            </p>
-          </div>
-          <div class="footer">
-            This is an automated system generated payslip from ColorMyles HRMS.<br/>
-            For any payroll discrepancies, please contact the HR/Accounts department.
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+  /** Payslip email. Every figure comes from the backend payroll result; all text is HTML-escaped. */
+  private generatePayslipHtml(s: EmployeePayrollSummary): string {
+    const rows = (lines: { label: string; amount: number; note?: string }[]) =>
+      lines.map((l) => `<tr><td style="padding:4px 8px">${esc(l.label)}${l.note ? ` <span style="color:#64748b;font-size:11px">(${esc(l.note)})</span>` : ''}</td><td style="padding:4px 8px;text-align:right">${inr(l.amount)}</td></tr>`).join('');
+    const p = s.payslip;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#1e293b">
+<div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+  <div style="background:#011638;color:#fff;padding:20px;text-align:center"><h2 style="margin:0">ColorMyles HRMS</h2>
+  <div style="font-size:13px;color:#94a3b8">Salary Payslip, ${esc(s.month)}</div></div>
+  <div style="padding:20px">
+    <p>Dear <strong>${esc(s.name)}</strong> (Emp ID: <strong>${esc(s.empCode)}</strong>),</p>
+    <p style="font-size:13px">Paid days: <strong>${esc(s.payableDays)}</strong> of ${esc(s.monthDays)}. Loss of pay: <strong>${esc(s.lopDays)}</strong> day(s).</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="background:#ecfdf5"><th style="text-align:left;padding:6px 8px">Earnings</th><th style="text-align:right;padding:6px 8px">₹</th></tr>
+      ${rows(p.earnings)}
+      <tr style="font-weight:bold"><td style="padding:6px 8px">Total earnings</td><td style="padding:6px 8px;text-align:right">${inr(p.totalEarnings)}</td></tr>
+      <tr style="background:#fef2f2"><th style="text-align:left;padding:6px 8px">Deductions</th><th style="text-align:right;padding:6px 8px">₹</th></tr>
+      ${rows(p.deductions)}
+      <tr style="font-weight:bold"><td style="padding:6px 8px">Total deductions</td><td style="padding:6px 8px;text-align:right">${inr(p.totalDeductions)}</td></tr>
+    </table>
+    <div style="background:#011638;color:#fff;border-radius:10px;text-align:center;padding:16px;margin:18px 0">
+      <div style="font-size:12px;opacity:.85">NET PAYABLE</div>
+      <div style="font-size:26px;font-weight:800">${inr(p.netPay)}</div>
+      <div style="font-size:12px;opacity:.85">${esc(s.netPayableWords)}</div>
+    </div>
+    <p style="font-size:12px;color:#475569">${s.bankAccount ? `Bank A/C: ${esc(maskTail(s.bankAccount))}` : ''}</p>
+  </div>
+  <div style="background:#f1f5f9;padding:12px;text-align:center;font-size:12px;color:#64748b">System-generated payslip. For discrepancies contact HR/Accounts.</div>
+</div></body></html>`;
   }
 
-  /**
-   * Sends or simulates sending a payslip email to an employee
-   */
   public async sendPayslipEmail(
     summary: EmployeePayrollSummary,
     recipientEmail?: string
   ): Promise<{ success: boolean; message: string; sentTo: string; previewHtml?: string }> {
     const targetEmail = recipientEmail || summary.email;
-
     if (!targetEmail) {
-      throw new Error(`No email address registered for employee ${summary.name} (${summary.empCode}). Please update their profile email first.`);
+      throw new Error(`No email address registered for employee ${summary.empCode}. Update their profile email first.`);
     }
-
     const htmlContent = this.generatePayslipHtml(summary);
-
     if (this.transporter) {
-      try {
-        await this.transporter.sendMail({
-          from: process.env.SMTP_FROM || '"ColorMyles HRMS" <payroll@colormyles.com>',
-          to: targetEmail,
-          subject: `ColorMyles Official Payslip — ${summary.month} (${summary.name})`,
-          html: htmlContent
-        });
-
-        return {
-          success: true,
-          message: `Payslip email successfully dispatched to ${targetEmail}`,
-          sentTo: targetEmail
-        };
-      } catch (err: any) {
-        console.error('[EmailService] SMTP Dispatch failed:', err);
-        throw new Error(`SMTP Dispatch failed: ${err.message}`);
-      }
-    } else {
-      // In simulation mode, return success with preview
-      return {
-        success: true,
-        message: `Payslip email successfully generated & queued for ${targetEmail} (Simulation Mode - configure SMTP in .env for production)`,
-        sentTo: targetEmail,
-        previewHtml: htmlContent
-      };
+      await this.transporter.sendMail({
+        from: process.env.SMTP_FROM || '"ColorMyles HRMS" <payroll@colormyles.com>',
+        to: targetEmail,
+        subject: `ColorMyles Payslip, ${summary.month}`,
+        html: htmlContent,
+      });
+      return { success: true, message: `Payslip dispatched to ${targetEmail}`, sentTo: targetEmail };
     }
+    return {
+      success: true,
+      message: `Payslip generated for ${targetEmail} (simulation mode: configure SMTP for live delivery)`,
+      sentTo: targetEmail,
+      previewHtml: htmlContent,
+    };
   }
 }
 

@@ -2,7 +2,11 @@ export interface EmployeeOtAdjustment {
   otHours?: number;
   totalWorkHours?: number;
   multiplier?: number;
-  sundayDays?: number; // Sundays worked (fractional allowed, e.g. 1.5)
+  /** HR override of the days worked on a weekly off / paid holiday. Absent = use what the attendance resolver recognized. */
+  weeklyOffWorkDays?: number;
+  holidayWorkDays?: number;
+  /** @deprecated legacy name for weeklyOffWorkDays; still read so saved adjustments keep working. */
+  sundayDays?: number;
 }
 
 export interface IPayrollAdjustment {

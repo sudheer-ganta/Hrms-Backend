@@ -1,23 +1,25 @@
 import crypto from 'crypto';
 
 /**
- * Creates a deterministic SHA-256 hash representing a biometric punch.
- * Uses: sourceId + employeeCode + punchTimestamp + machineId
+ * Deterministic idempotency key of a raw punch, built ONLY from canonical business values
+ * (IST date + time, no server-timezone-dependent instant). The same vendor punch always
+ * produces the same hash on any machine, so re-syncs never duplicate it.
  */
-export const createVendorRecordHash = (
-  sourceId: string,
-  employeeCode: string,
-  punchDateTime: Date | string,
-  machineId?: string | null
-): string => {
-  const timestamp = typeof punchDateTime === 'string' 
-    ? new Date(punchDateTime).toISOString() 
-    : punchDateTime.toISOString();
-
-  const normalizedSource = (sourceId || '').trim().toLowerCase();
-  const normalizedEmp = (employeeCode || '').trim().toUpperCase();
-  const normalizedMachine = (machineId || '0').toString().trim();
-
-  const rawString = `${normalizedSource}|${normalizedEmp}|${timestamp}|${normalizedMachine}`;
-  return crypto.createHash('sha256').update(rawString).digest('hex');
+export const createRawPunchHash = (parts: {
+  origin: string;
+  sourceId: string;
+  employeeCode: string;
+  entryDate: string; // YYYY-MM-DD IST
+  entryTime: string; // HH:mm:ss IST
+  machineId?: string | null;
+}): string => {
+  const raw = [
+    parts.origin.trim().toUpperCase(),
+    parts.sourceId.trim().toLowerCase(),
+    parts.employeeCode.trim().toUpperCase(),
+    parts.entryDate,
+    parts.entryTime,
+    String(parts.machineId ?? '0').trim(),
+  ].join('|');
+  return crypto.createHash('sha256').update(raw).digest('hex');
 };
