@@ -32,7 +32,7 @@ export class EmployeeMasterController {
   public updateProfile = handle(async (req: AuthRequest, res: Response) => {
     const code = normalizeEmpCode(req.params.empCode);
     if (!isValidEmpCode(code)) throw ApiError.validation('Invalid employee code.', [{ field: 'empCode', issue: 'Invalid' }]);
-    res.json({ success: true, data: await employeeMasterService.updateProfile(code, req.body) });
+    res.json({ success: true, data: await employeeMasterService.updateProfile(code, req.body, req.user?.name || req.user?.email || 'Unknown') });
   });
 
   /** POST /employees/salary-preview: the single backend salary formula, nothing persisted. */

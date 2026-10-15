@@ -1,6 +1,6 @@
 import { EmployeeModel } from './employeeMaster.model.js';
 import {
-  EmployeeProfile, EMPLOYEE_STATUSES, PERSONAL_FIELDS, EMPLOYMENT_FIELDS, SALARY_FIELDS, BANK_FIELDS,
+  EmployeeProfile, EMPLOYEE_STATUSES, PERSONAL_FIELDS, EMPLOYMENT_FIELDS, SALARY_FIELDS, BANK_FIELDS, SALARY_EFFECTIVE_FIELD,
 } from './employeeMaster.types.js';
 import { computeSalaryBreakdown, SalaryBreakdown } from './salary.js';
 import { siteService } from '../sites/site.service.js';
@@ -9,6 +9,9 @@ import { normalizeEmpCode, isValidEmpCode } from '../../utils/empCode.js';
 import { isValidBusinessDate, isValidBusinessMonth } from '../../utils/istTime.js';
 import { requireDb } from '../../config/db.js';
 import { requireObject, optionalNumber } from '../../utils/validate.js';
+import { payrollRunService } from '../payroll/payrollRun.service.js';
+import { istMonth } from '../../utils/istTime.js';
+import { FROM_THE_BEGINNING, SALARY_STORED_FIELDS, SalaryValues, isRevisionMonth, latestValues, pickSalary, salaryAsOf, withRevision } from './salaryRevisions.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TEXT_MAX: Record<string, number> = {
@@ -17,7 +20,7 @@ const TEXT_MAX: Record<string, number> = {
   ifscCode: 11, panNumber: 10, aadhaarNumber: 12, uanNumber: 12, esiNumber: 20,
 };
 
-const ALLOWED = new Set<string>([...PERSONAL_FIELDS, ...EMPLOYMENT_FIELDS, ...SALARY_FIELDS, ...BANK_FIELDS]);
+const ALLOWED = new Set<string>([...PERSONAL_FIELDS, ...EMPLOYMENT_FIELDS, ...SALARY_FIELDS, ...BANK_FIELDS, SALARY_EFFECTIVE_FIELD]);
 
 export const maskTail = (v?: string, keep = 4): string | undefined => {
   if (!v) return v;
@@ -66,6 +69,12 @@ export async function validateProfileInput(input: unknown): Promise<Record<strin
       if (v === null || v === '') { out[k] = null; continue; }
       const num = optionalNumber(v, k, { min: 0, max: 100_000_000 });
       out[k] = num;
+      continue;
+    }
+    if (k === SALARY_EFFECTIVE_FIELD) {
+      if (v === '' || v === null) continue; // not given: defaults to the current month
+      if (v !== FROM_THE_BEGINNING && !isRevisionMonth(v)) fail(k, 'Must be YYYY-MM');
+      else out[k] = v;
       continue;
     }
     if (k === 'otEligible') { out[k] = Boolean(v); continue; }
@@ -174,7 +183,7 @@ class EmployeeMasterService {
     if (!isValidEmpCode(empCode)) throw ApiError.validation('A valid employee code is required.', [{ field: 'empCode', issue: 'Invalid' }]);
     if (await EmployeeModel.exists({ empCode })) throw ApiError.conflict(`Employee ${empCode} already exists.`);
     const { empCode: _ignored, ...rest } = body;
-    const fields = await validateProfileInput(rest);
+    const { [SALARY_EFFECTIVE_FIELD]: _eff, ...fields } = await validateProfileInput(rest); // a new profile's salary applies from the start
     if (!fields.name) throw ApiError.validation('Employee name is required.', [{ field: 'name', issue: 'Required' }]);
     const salary = computeSalaryBreakdown(fields as any);
     const doc = await EmployeeModel.create({
@@ -189,13 +198,17 @@ class EmployeeMasterService {
     return toProfile(doc.toObject());
   }
 
-  /** Whitelisted update. Salary fields recompute through the single formula. */
-  public async updateProfile(empCode: string, input: unknown): Promise<EmployeeProfile> {
+  /**
+   * Whitelisted update. Salary fields recompute through the single formula and are saved as a REVISION that takes
+   * effect from `salaryEffectiveFrom` (default: the current month), so earlier months keep the salary they had.
+   * A profile's first-ever salary applies from the beginning. A closed month's salary can't be changed.
+   */
+  public async updateProfile(empCode: string, input: unknown, changedBy = 'system'): Promise<EmployeeProfile> {
     requireDb();
     const code = normalizeEmpCode(empCode);
     const existing = await EmployeeModel.findOne({ empCode: code }).lean();
     if (!existing) throw ApiError.notFound(`Employee ${code} not found.`);
-    const fields = await validateProfileInput(input);
+    const { [SALARY_EFFECTIVE_FIELD]: effectiveInput, ...fields } = await validateProfileInput(input);
 
     const $set: Record<string, unknown> = {};
     const $unset: Record<string, ''> = {};
@@ -207,20 +220,29 @@ class EmployeeMasterService {
 
     const touchesSalary = Object.keys(fields).some((k) => (SALARY_FIELDS as readonly string[]).includes(k));
     if (touchesSalary) {
+      const profile = toProfile(existing);
+      const requested = (effectiveInput as string | undefined) ?? istMonth();
+      // Start from the salary that was in force at the effective month, so a single edited field builds on the right base.
+      const base: Record<string, unknown> = salaryAsOf(profile, requested) as any;
       // Merge stored salary inputs with the new ones; derived values are recomputed, not trusted.
       const merged: Record<string, unknown> = {};
-      for (const k of SALARY_FIELDS) merged[k] = (existing as any)[k];
+      for (const k of SALARY_FIELDS) merged[k] = base[k];
       for (const k of SALARY_FIELDS) if (k in fields) merged[k] = (fields as any)[k];
       // A changed CTC invalidates previously derived components that were not explicitly re-sent.
       if ('monthlyCtc' in fields) {
         for (const k of SALARY_FIELDS) if (k !== 'monthlyCtc' && !(k in fields)) merged[k] = undefined;
       }
       const breakdown = computeSalaryBreakdown(merged as any);
-      if (!breakdown) {
-        for (const k of [...SALARY_FIELDS, 'annualCtc', 'fixedSalary', 'grossSalary', 'totalNetSalary']) $unset[k] = '';
-      } else {
-        const { rulesVersion: _v, ...vals } = breakdown;
-        Object.assign($set, vals);
+      const values: SalaryValues = breakdown ? pickSalary(breakdown) : {};
+      const { revisions, effectiveFrom } = withRevision(profile, values, requested, changedBy, new Date().toISOString());
+      if (effectiveFrom !== FROM_THE_BEGINNING) await payrollRunService.assertMonthOpen(effectiveFrom, 'This salary change');
+
+      $set.salaryRevisions = revisions;
+      // The top-level fields always mirror the latest revision ("current salary" for every screen that shows one).
+      const latest = latestValues(revisions);
+      for (const k of SALARY_STORED_FIELDS) {
+        if (latest[k] === undefined) $unset[k] = '';
+        else $set[k] = latest[k];
       }
     }
     $set.updatedAt = new Date().toISOString();

@@ -44,6 +44,10 @@ const EmployeeProfileSchema = new Schema<EmployeeProfileDocument>(
     employerEsic: { type: Number },
     professionalTax: { type: Number },
     minimumBonus: { type: Number },
+    salaryRevisions: {
+      type: [{ _id: false, effectiveFrom: { type: String, required: true }, values: { type: Schema.Types.Mixed, default: {} }, changedBy: String, changedAt: { type: String, required: true } }],
+      default: undefined, // absent (not []) until the first revision, so "never revised" stays distinguishable
+    },
 
     bankName: { type: String },
     bankAccount: { type: String },

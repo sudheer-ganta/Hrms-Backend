@@ -11,6 +11,7 @@ import { payrollRunService } from './payrollRun.service.js';
 import { payrollAdjustmentService } from './payrollAdjustment.service.js';
 import { EmployeeOtAdjustment } from './payrollAdjustment.types.js';
 import { PAYROLL_RULES as R } from './payroll.config.js';
+import { salaryAsOf } from '../employees/salaryRevisions.js';
 import { ApiError } from '../../utils/apiError.js';
 import { normalizeEmpCode } from '../../utils/empCode.js';
 import { istMonth, istToday, isValidBusinessMonth } from '../../utils/istTime.js';
@@ -46,7 +47,9 @@ export interface ComputeArgs {
  * PURE payroll formula for one employee-month. No I/O. The ONLY place salary math lives.
  * (Statutory constants: payroll.config.ts. Salary structure: employees/salary.ts.)
  */
-export function computeEmployeePayroll({ profile, month, days, policy, adjustment }: ComputeArgs): EmployeePayrollSummary {
+export function computeEmployeePayroll({ profile: currentProfile, month, days, policy, adjustment }: ComputeArgs): EmployeePayrollSummary {
+  // Each month is priced with the salary that was in force for THAT month (see employees/salaryRevisions.ts).
+  const profile = salaryAsOf(currentProfile, month);
   const monthDays = days.length;
   let presentDays = 0, halfDays = 0, absentDays = 0, leaveDays = 0, unpaidLeaveDays = 0, weeklyOffs = 0, holidayCount = 0;
   let missedPunchDays = 0, wfhDays = 0, onDutyDays = 0, elapsedDays = 0, lateArrivals = 0;

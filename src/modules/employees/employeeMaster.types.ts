@@ -1,6 +1,17 @@
 export type EmployeeStatus = 'active' | 'inactive' | 'resigned';
 export const EMPLOYEE_STATUSES: readonly EmployeeStatus[] = ['active', 'inactive', 'resigned'];
 
+/**
+ * A salary change that takes effect from a month. `values` are the stored salary fields (inputs + derived).
+ * The revision in force for a month is the one with the latest `effectiveFrom` <= that month.
+ */
+export interface SalaryRevision {
+  effectiveFrom: string; // YYYY-MM, or '0000-00' = applies to every month
+  values: Partial<Record<string, number>>;
+  changedBy?: string;
+  changedAt: string; // ISO instant
+}
+
 /** Canonical employee DTO (backend response and frontend type are identical). */
 export interface EmployeeProfile {
   employeeId?: string; // immutable document id
@@ -38,6 +49,8 @@ export interface EmployeeProfile {
   employerEsic?: number;
   professionalTax?: number;
   minimumBonus?: number;
+  /** Month-by-month salary history; the fields above mirror the latest revision. Absent = never revised. */
+  salaryRevisions?: SalaryRevision[];
 
   // Overtime
   otEligible: boolean;
@@ -68,4 +81,6 @@ export const SALARY_FIELDS = [
   'monthlyCtc', 'basicSalary', 'da', 'hra', 'specialAllowance', 'otherAllowance',
   'employeePf', 'employerPf', 'employeeEsic', 'employerEsic', 'professionalTax', 'minimumBonus',
 ] as const;
+/** Not a profile field: the month a salary change takes effect from (sent with salary edits). */
+export const SALARY_EFFECTIVE_FIELD = 'salaryEffectiveFrom';
 export const BANK_FIELDS = ['bankName', 'bankAccount', 'ifscCode', 'panNumber', 'aadhaarNumber', 'uanNumber', 'esiNumber'] as const;
