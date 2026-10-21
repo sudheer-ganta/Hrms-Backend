@@ -100,8 +100,8 @@ export class AuthService {
     requireDb();
     const email = String(input.email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email)) throw ApiError.validation('A valid email is required.', [{ field: 'email', issue: 'Invalid email' }]);
-    if (!(['FOUNDER', 'HR', 'EMPLOYEE'] as string[]).includes(input.role)) {
-      throw ApiError.validation('Role must be FOUNDER, HR, or EMPLOYEE.', [{ field: 'role', issue: 'Invalid role' }]);
+    if (!(['SUPER_ADMIN', 'FOUNDER', 'HR', 'EMPLOYEE'] as string[]).includes(input.role)) {
+      throw ApiError.validation('Role must be SUPER_ADMIN, FOUNDER, HR, or EMPLOYEE.', [{ field: 'role', issue: 'Invalid role' }]);
     }
     const empCode = input.empCode ? normalizeEmpCode(input.empCode) : undefined;
     if (input.role === 'EMPLOYEE' && (!empCode || !isValidEmpCode(empCode))) {
@@ -124,7 +124,7 @@ export class AuthService {
     const created = await UserModel.create({
       email,
       passwordHash: await bcrypt.hash(input.password, 12),
-      name: name || (input.role === 'FOUNDER' ? 'Founder' : input.role === 'HR' ? 'HR' : `Employee ${empCode}`),
+      name: name || (input.role === 'SUPER_ADMIN' ? 'Super Admin' : input.role === 'FOUNDER' ? 'Founder' : input.role === 'HR' ? 'HR' : `Employee ${empCode}`),
       role: input.role,
       empCode,
       status: 'active',

@@ -43,7 +43,7 @@ export class AuthController {
       email: requireNonEmptyString(body.email, 'email', 254),
       name: typeof body.name === 'string' ? body.name : undefined,
       password: requireNonEmptyString(body.password, 'password', 128),
-      role: body.role as 'FOUNDER' | 'EMPLOYEE',
+      role: body.role as 'SUPER_ADMIN' | 'FOUNDER' | 'HR' | 'EMPLOYEE',
       empCode: typeof body.empCode === 'string' ? body.empCode : undefined,
     });
     res.status(201).json({ success: true, data: user });

@@ -22,7 +22,7 @@ export interface CreateUserInput {
   email: string;
   name?: string;
   password: string;
-  role: 'FOUNDER' | 'HR' | 'EMPLOYEE';
+  role: 'SUPER_ADMIN' | 'FOUNDER' | 'HR' | 'EMPLOYEE';
   empCode?: string;
 }
 
