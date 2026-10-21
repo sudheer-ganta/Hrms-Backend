@@ -31,7 +31,7 @@ resolveDay(facts, policy)             THE single authority. Pure function. Produ
 | 1 | `empCode` (via `normalizeEmpCode`) is the canonical employee key; `employeeId` (`_id`) is exposed in the DTO. | The code is immutable (`immutable: true`, never accepted from clients), so it is as stable as an id and already present in every collection. Vendor codes map to it through `employee_source_mappings`. |
 | 2 | **Status is computed at read time**; only FACTS are stored. | A holiday, weekly-off or threshold change can never leave a stale stored verdict. Cost: a pure function per day, negligible at this scale. |
 | 3 | `web-portal` is not a source. ESS punches are `RawPunch(origin=ESS_WEB)` attached to the matched Site. | Removes the second daily row per person. |
-| 4 | Vendor "present"/"half" verdicts are honored; vendor "absent" is re-derived by our policy; vendor off-days are honored. | This preserves previous payroll behavior exactly. Only the authority moved (one function instead of five). |
+| 4 | The device's P / P-2 / A codes are kept as information (`vendorStatus`) but never decide the day: present, half day or absent come from the hours worked and the Settings thresholds. The device's weekly-off, holiday and paid-leave codes are still honored. | Changed 2026-10-21. Honoring the device's P paid a full day for 37 minutes and for 4-hour days on 379 days in Sep-Oct, because the device knows nothing about this company's shift rules. A day with no verdict-bearing hours and no punches is absent. |
 | 5 | A single punch is `MISSED_PUNCH`: paid as a standard day, flagged for review. | Previous payroll paid it as present; the label is now honest. |
 | 6 | Weekly off / holiday win over every other signal. | Previous behavior. Work on an off day is paid via the explicit Sunday-work adjustment in the OT calculator. |
 | 7 | `OPTIONAL` holidays are working days unless `paid: true`. Legacy holidays default to paid. | Explicit semantics, no silent change to existing data. |
@@ -40,16 +40,20 @@ resolveDay(facts, policy)             THE single authority. Pure function. Produ
 | 10 | Payroll rules live in `payroll.config.ts` with a version stamped on every snapshot. | See "Payroll rules preserved" below. |
 | 11 | Closing a month: validate → freeze as **version N+1** in `payroll_snapshots` (immutable) → lock. Reopen needs a reason and is Super-Admin only; old versions are kept. | Audit trail, no silent overwrite. |
 | 12 | Locked months reject adjustments, requests, holiday changes, ESS punches and recompute; vendor sync skips and reports them. | The snapshot can never drift from the data underneath it. |
+| 13 | **Salary is month-correct.** A salary change is a revision with an effective month (`employees.salaryRevisions`); payroll for month M uses the revision in force for M (`salaryAsOf`), and the profile's top-level salary fields mirror the latest revision. A profile's first-ever salary applies from the beginning; a change cannot take effect from a closed month. | A raise in October never rewrites September, including a September that is reopened and re-closed. Profiles never revised behave exactly as before. |
+| 14 | Locking a month is refused when working days have no stored punch for anyone (`attendanceCoverage`), unless an administrator acknowledges it. The scheduler also backfills the month so far every few hours. | Missing sync data would otherwise lock as loss of pay for everyone. |
 
 ## Payroll rules preserved (no silent salary changes)
 
-`payroll.config.ts` reproduces the previous behavior. Two behaviors are questionable and are exposed as
-explicit flags rather than changed:
+`payroll.config.ts` holds every salary constant, with a version stamped on each closed snapshot. Two behaviors began
+as explicit flags and the company has since decided them (they follow its own salary statement):
 
-* `halfDayLopFraction = 0`: a half day is paid in full (as before). Set to `0.5` to deduct half a day.
-* `ptDeductedFromNet = false`: Professional Tax is carved out of CTC when deriving gross and is not deducted again
-  from net pay (as before). The payslip now shows it under "employer-borne" instead of as a phantom deduction.
-  Set to `true` only if the company decides PT must come out of the employee's pay.
+* `halfDayLopFraction = 0.5`: an attendance half day loses half a day of pay. A *paid half-day leave* is different:
+  the leave balance already pays for that half, so it costs no pay (2026.10-6). An *unpaid half-day leave* loses 0.5 day.
+* `ptDeductedFromNet = true`: Professional Tax is deducted from net pay when the earned gross (including overtime and
+  weekly-off / holiday pay) reaches the threshold. Set to `false` to carve it out of CTC instead.
+
+PF wages, ESI wages, PT and rounding follow the company's statement; `tests/statementPayroll.test.ts` pins them to its figures.
 
 Other documented consequences of unifying the formula: when a stored profile has gaps, the CTC breakdown is
 completed by the single formula in `employees/salary.ts` (previously two slightly different fallbacks existed).
@@ -94,6 +98,7 @@ reappears outside `policy.service.ts` / `policy.model.ts`.
 | Holidays, paid / unpaid | `policy.holidays[].paid` | `isHolidayDate`, resolver (`isHoliday`, `isPaidHoliday`) | Resolver, leave-day counting, payroll holiday count |
 | Work on weekly off / paid holiday | Settings > Work on Weekly Off (`policy.offDayWork`) | `resolveDay` (`offDayWorkFraction`) | Payroll `sundayDays` (HR override still wins), timesheet, portal, employee drawer |
 | Overtime on/off, hours per day | `policy.overtime` | `resolveDay` (`overtimeMinutes`), payroll hourly rate | Payroll, reports |
+| Shifts and overtime hours | `policy.shift` (default) + `policy.shifts[]` (named), each with `otWindows`; assigned per employee by `profile.shiftName` | `resolveDay`: overtime = minutes between first and last punch inside the employee's shift OT windows (no windows = no overtime; the device's own OT figure is not used) | Payroll OT hours, timesheet, reports |
 | Leave quotas | `policy.leaves` | `requests.service` balance | Requests, portal |
 | Geofence mode | `policy.ess` | `punch.service` | ESS punch |
 | Statutory / salary constants | `payroll.config.ts` (versioned) | `employees/salary.ts`, `computeEmployeePayroll` | Payroll, payslip, exports |

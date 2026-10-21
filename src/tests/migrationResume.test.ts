@@ -1,8 +1,7 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { startMongoOnly, mongodAvailable } from './helpers.js';
+import { startMongoOnly, mongodAvailable, runNodeScript } from './helpers.js';
 
 const SKIP = !mongodAvailable() ? 'no local mongod available' : false;
 
@@ -14,11 +13,7 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
   let m: Awaited<ReturnType<typeof startMongoOnly>>;
   const script = path.resolve(process.cwd(), 'src/scripts/migrate_canonical.ts');
   const run = (extraEnv: Record<string, string>, ...flags: string[]) =>
-    spawnSync(process.execPath, ['--import', 'tsx', script, ...flags], {
-      env: { ...process.env, MIGRATE_MONGODB_URI: m.uri, JWT_SECRET: 'x'.repeat(48), NODE_ENV: 'test', MIGRATE_DAY_BATCH: '50', ...extraEnv },
-      encoding: 'utf-8',
-      timeout: 180_000,
-    });
+    runNodeScript(script, flags, { ...process.env, MIGRATE_MONGODB_URI: m.uri, JWT_SECRET: 'x'.repeat(48), NODE_ENV: 'test', MIGRATE_DAY_BATCH: '50', ...extraEnv }, 180_000);
 
   const EMPLOYEES = 12;
   const DAYS = 20; // 240 employee-days => 5 batches of 50
@@ -49,7 +44,7 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
       indexes: Object.fromEntries(await Promise.all((await m.db.listCollections().toArray()).map(async (c) => [c.name, (await m.db.collection(c.name).indexes()).map((i) => i.name).sort()]))),
     });
     const before = await snapshot();
-    const r = run({});
+    const r = await run({});
     assert.equal(r.status, 0, r.stderr + r.stdout);
     assert.match(r.stdout, /Dry run only/);
     assert.match(r.stdout, /Source counts: raw punches 0, daily rows \(in_out\) 240/);
@@ -58,7 +53,7 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
   });
 
   test('a crash mid-way leaves a checkpoint; the next run resumes from the last good batch', async () => {
-    const crashed = run({ MIGRATE_FAIL_AFTER_BATCHES: '2' }, '--apply', '--backup-confirmed');
+    const crashed = await run({ MIGRATE_FAIL_AFTER_BATCHES: '2' }, '--apply', '--backup-confirmed');
     assert.notEqual(crashed.status, 0, 'the simulated crash must fail the run');
     assert.match(crashed.stdout, /batch 2\/5/);
     const st: any = await state();
@@ -66,7 +61,7 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
     assert.equal(st.nextBatch, 2, 'two batches were completed and recorded');
     assert.equal(await dayCount(), 100, '2 batches x 50 employee-days are already in the database');
 
-    const resumed = run({}, '--apply', '--backup-confirmed');
+    const resumed = await run({}, '--apply', '--backup-confirmed');
     assert.equal(resumed.status, 0, resumed.stderr + resumed.stdout);
     assert.match(resumed.stdout, /Checkpoint found: status RUNNING, batch 2\/5, will resume/);
     assert.match(resumed.stdout, /Resuming at batch 3\/5: 100 employee-days already done are skipped/);
@@ -81,12 +76,12 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
   });
 
   test('re-running a completed migration changes nothing, and --restart rebuilds without duplicates', async () => {
-    const again = run({}, '--apply', '--backup-confirmed');
+    const again = await run({}, '--apply', '--backup-confirmed');
     assert.equal(again.status, 0, again.stderr + again.stdout);
     assert.match(again.stdout, /migrated this run 0 employee-days/);
     assert.equal(await dayCount(), EMPLOYEES * DAYS);
 
-    const restart = run({}, '--apply', '--backup-confirmed', '--restart');
+    const restart = await run({}, '--apply', '--backup-confirmed', '--restart');
     assert.equal(restart.status, 0, restart.stderr + restart.stdout);
     assert.match(restart.stdout, /migrated this run 240 employee-days/);
     assert.equal(await dayCount(), EMPLOYEES * DAYS);
@@ -96,7 +91,7 @@ describe('migration: resumable, idempotent, self-verifying', { skip: SKIP }, () 
 
   test('verification catches a bad row and fails the run (exit code 3)', async () => {
     await m.db.collection('attendance_days').insertOne({ employeeCode: 'E100', businessDate: '2026-09-31', firstIn: '99:99', workMinutes: -5 });
-    const r = run({}, '--apply', '--backup-confirmed');
+    const r = await run({}, '--apply', '--backup-confirmed');
     assert.equal(r.status, 3, r.stdout);
     assert.match(r.stdout, /\[VERIFY\] FAIL  no orphan attendance_days/);
     assert.match(r.stdout, /\[VERIFY\] FAIL  no invalid attendance_days/);

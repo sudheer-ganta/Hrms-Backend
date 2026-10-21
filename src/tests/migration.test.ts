@@ -1,8 +1,7 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { startMongoOnly, mongodAvailable } from './helpers.js';
+import { startMongoOnly, mongodAvailable, runNodeScript } from './helpers.js';
 
 const SKIP = !mongodAvailable() ? 'no local mongod available' : false;
 
@@ -11,11 +10,7 @@ describe('legacy → canonical data migration', { skip: SKIP }, () => {
   const script = path.resolve(process.cwd(), 'src/scripts/migrate_canonical.ts');
 
   const run = (...flags: string[]) =>
-    spawnSync(process.execPath, ['--import', 'tsx', script, ...flags], {
-      env: { ...process.env, MIGRATE_MONGODB_URI: m.uri, JWT_SECRET: 'x'.repeat(48), NODE_ENV: 'test' },
-      encoding: 'utf-8',
-      timeout: 120_000,
-    });
+    runNodeScript(script, flags, { ...process.env, MIGRATE_MONGODB_URI: m.uri, JWT_SECRET: 'x'.repeat(48), NODE_ENV: 'test' });
 
   before(async () => {
     m = await startMongoOnly();
@@ -56,7 +51,7 @@ describe('legacy → canonical data migration', { skip: SKIP }, () => {
 
   test('dry run reports the plan and changes nothing', async () => {
     const before = await counts();
-    const r = run();
+    const r = await run();
     assert.equal(r.status, 0, r.stderr + r.stdout);
     assert.match(r.stdout, /Dry run only/);
     assert.match(r.stdout, /archived:in_out_records:corrupted-partial-record/);
@@ -64,14 +59,14 @@ describe('legacy → canonical data migration', { skip: SKIP }, () => {
     assert.equal(await m.db.collection('attendance_days').countDocuments(), 0);
   });
 
-  test('refuses to write without --backup-confirmed', () => {
-    const r = run('--apply');
+  test('refuses to write without --backup-confirmed', async () => {
+    const r = await run('--apply');
     assert.equal(r.status, 2);
     assert.match(r.stderr, /backup-confirmed/);
   });
 
   test('apply: identity, raw punches, staging, adjustments, snapshots and attendance days are canonical', async () => {
-    const r = run('--apply', '--backup-confirmed');
+    const r = await run('--apply', '--backup-confirmed');
     assert.equal(r.status, 0, r.stderr + r.stdout);
     const d = m.db;
 
@@ -133,7 +128,7 @@ describe('legacy → canonical data migration', { skip: SKIP }, () => {
   test('re-running the migration is idempotent', async () => {
     const before = await counts();
     const days = await m.db.collection('attendance_days').countDocuments();
-    const r = run('--apply', '--backup-confirmed');
+    const r = await run('--apply', '--backup-confirmed');
     assert.equal(r.status, 0, r.stderr + r.stdout);
     assert.doesNotMatch(r.stdout, /archived:/);
     assert.deepEqual(await counts(), before);

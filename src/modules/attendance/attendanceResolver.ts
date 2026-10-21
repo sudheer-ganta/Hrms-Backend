@@ -1,5 +1,7 @@
 import { HRMSPolicySettings } from '../settings/policy.types.js';
-import { getShiftStandardHours, isOvernightShift, lateThresholdMinutes, shiftStartMinutes, shiftEndMinutes } from '../settings/policy.service.js';
+import {
+  getShiftStandardHours, isOvernightShift, lateThresholdMinutes, shiftStartMinutes, shiftEndMinutes, overtimeMinutesIn, policyForShift,
+} from '../settings/policy.service.js';
 import { dayNameOf, hhmmToMinutes, durationMinutes } from '../../utils/istTime.js';
 import { AttendanceStatus, mapVendorStatus, STATUS_LABELS } from './attendanceStatus.js';
 
@@ -28,7 +30,6 @@ export interface DayFacts {
   punchCount?: number;
   workMinutes?: number;      // measured (punch span, else vendor)
   vendorStatus?: string | null;
-  vendorOvertimeMinutes?: number | null;
   vendorLateMinutes?: number | null;
   adjustments?: ActiveAdjustment[];
 }
@@ -37,6 +38,10 @@ export interface ResolveContext {
   policy: HRMSPolicySettings;
   /** Current IST business date; days after it are "future" and have no status. */
   today: string;
+  /** The employee's assigned shift (profile.shiftName). Unknown/empty = the default shift. */
+  shiftName?: string | null;
+  /** Overtime switched on for this employee (the OT tick on their profile). Off = no overtime minutes at all. */
+  otEligible?: boolean;
 }
 
 export type ResolutionSource = 'POLICY' | 'ADJUSTMENT' | 'VENDOR' | 'PUNCHES' | 'NONE';
@@ -76,6 +81,7 @@ export interface ResolvedDay {
   isFuture: boolean;
 }
 
+/** Length of the shift in `policy.shift` (credited for a single swipe / WFH / on-duty day). */
 export const standardDayMinutes = (policy: HRMSPolicySettings): number =>
   Math.round(getShiftStandardHours(policy.shift) * 60);
 
@@ -101,7 +107,8 @@ export const classifyWork = (
 };
 
 export function resolveDay(businessDate: string, facts: DayFacts | undefined, ctx: ResolveContext): ResolvedDay {
-  const { policy, today } = ctx;
+  const { today } = ctx;
+  const policy = policyForShift(ctx.policy, ctx.shiftName);
   const f = facts || {};
   const standard = standardDayMinutes(policy);
   const holiday = policy.holidays.find((h) => h.date === businessDate);
@@ -192,28 +199,27 @@ export function resolveDay(businessDate: string, facts: DayFacts | undefined, ct
   const isLate = firstInMin !== null ? policyLate : (f.vendorLateMinutes ?? 0) > 0;
   const lateMinutes = firstInMin !== null ? Math.max(0, firstInMin - startMin) : f.vendorLateMinutes ?? 0;
 
-  const derivedOt = Math.max(0, measured - standard);
-  const overtimeMinutes = !policy.overtime.enabled
-    ? 0
-    : f.vendorOvertimeMinutes !== undefined && f.vendorOvertimeMinutes !== null
-    ? f.vendorOvertimeMinutes
-    : derivedOt;
-
   const outMin = hhmmToMinutes(f.lastOut);
+  // Overtime is ONLY the time between first and last punch that falls inside the employee's shift OT windows.
+  // (The device's own OT figure is deliberately not used: it knows nothing about shifts.)
+  const overtimeMinutes = policy.overtime.enabled && ctx.otEligible !== false && hasOut && firstInMin !== null && outMin !== null
+    ? overtimeMinutesIn(policy.shift, firstInMin, outMin)
+    : 0;
+
   const earlyCheckoutMinutes = hasOut && outMin !== null && !isOvernightShift(policy.shift) ? Math.max(0, shiftEndMinutes(policy.shift) - outMin) : 0;
 
   const worked = (status: AttendanceStatus, source: ResolutionSource, credited: number, extra: Partial<ResolvedDay> = {}) =>
     done({ status, source, workMinutes: measured, creditedWorkMinutes: credited, overtimeMinutes, isLate, lateMinutes, earlyCheckoutMinutes, ...extra });
 
-  // 4. Vendor verdicts that carry a business meaning.
+  // 4. Vendor verdicts that carry a business meaning: off-days and leave. The device's P and P/2 are NOT such verdicts:
+  //    the device knows nothing about this company's shift rules, so it would pay a full day for 37 minutes on the floor.
+  //    Whether a day is present, half or absent is decided below from the hours worked and the Settings thresholds.
   const vendor = mapVendorStatus(f.vendorStatus);
   if (vendor === 'WEEKLY_OFF' || vendor === 'HOLIDAY') {
     // The device roster declared an off-day the policy does not know about; honored as before.
     return offDay(vendor, 'VENDOR');
   }
   if (vendor === 'LEAVE_PAID') return done({ status: 'LEAVE_PAID', source: 'VENDOR', leaveFraction: 1 });
-  if (vendor === 'PRESENT') return worked('PRESENT', 'VENDOR', measured);
-  if (vendor === 'HALF_DAY') return worked('HALF_DAY', 'VENDOR', measured);
 
   // 5. Derive from punches / vendor times with the policy thresholds.
   if (!hasIn && !hasOut && !(f.punchCount && f.punchCount > 0) && measured === 0) {

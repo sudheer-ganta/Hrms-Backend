@@ -14,10 +14,12 @@ import { EmployeeProfile } from '../modules/employees/employeeMaster.types.js';
  * Payroll edge-case matrix. Every case runs the REAL resolver and the REAL payroll formula.
  * September 2026: 30 days, Sundays 6/13/20/27 are weekly offs. Default policy unless stated.
  */
+// The default test shift pays overtime for time punched between 17:30 and 21:00.
 const policy = (over: Partial<HRMSPolicySettings> = {}): HRMSPolicySettings => ({
   ...DEFAULT_SETTINGS,
+  shift: { ...DEFAULT_SETTINGS.shift, otWindows: [{ start: '17:30', end: '21:00' }] },
   ...over,
-  overtime: { ...DEFAULT_SETTINGS.overtime, recognition: 'AUTOMATIC', ...(over.overtime || {}) },
+  overtime: { ...DEFAULT_SETTINGS.overtime, ...(over.overtime || {}) },
 });
 const profile = (over: Partial<EmployeeProfile> = {}): EmployeeProfile => ({ empCode: 'E1', name: 'Edge', otEligible: true, status: 'active', monthlyCtc: 30000, ...over });
 const full: DayFacts = { firstIn: '09:00', lastOut: '17:30', workMinutes: 510, punchCount: 2 };
@@ -73,6 +75,41 @@ describe('payroll edge cases (real resolver + real payroll formula)', () => {
     assert.equal(half.day('2026-09-02').leaveFraction, 0.5);
   });
 
+  test('half-day leave: a paid half-day costs no pay (the leave covers it); an unpaid half-day costs half a day, not a whole one', () => {
+    const leave = (paid: boolean, fraction: number): DayFacts => ({ adjustments: [{ id: 'a', requestId: 'r', kind: 'LEAVE', paid, fraction }] });
+    const paidHalf = run({ '2026-09-02': leave(true, 0.5) }).pay;
+    assert.equal(paidHalf.lopDays, 0);
+    assert.equal(paidHalf.lopDeduction, 0);
+    assert.equal(paidHalf.leaveDays, 0.5);
+    assert.equal(paidHalf.halfDays, 0, 'a covered half-day is leave, not an attendance half day');
+    assert.equal(paidHalf.payableDays, base.payableDays);
+    assert.equal(paidHalf.netPayable, base.netPayable, 'a paid half-day leave leaves the salary untouched');
+
+    const unpaidHalf = run({ '2026-09-02': leave(false, 0.5) }).pay;
+    assert.equal(unpaidHalf.unpaidLeaveDays, 0.5);
+    assert.equal(unpaidHalf.lopDays, 0.5);
+    assert.equal(unpaidHalf.lopDeduction, Math.round(0.5 * dailyWage));
+
+    // unchanged: a worked half day (not leave) still loses half a day, and a full unpaid day still loses one
+    const workedHalf = run({ '2026-09-02': { firstIn: '09:00', lastOut: '12:30', workMinutes: 210 } }).pay;
+    assert.equal(workedHalf.lopDays, 0.5);
+    assert.equal(run({ '2026-09-02': leave(false, 1) }).pay.lopDays, 1);
+  });
+
+  test('salary structure (Annexure K) is the designed full-month figures: it adds up and does not move with attendance', () => {
+    const lossy = run(Object.fromEntries(['2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'].map((d) => [d, undefined]))).pay;
+    assert.notEqual(lossy.pfDeduction, base.pfDeduction, 'the month\'s actual PF does move with attendance');
+    for (const pay of [base, lossy]) {
+      const st = pay.salaryStructure!;
+      assert.deepEqual(st, {
+        employeePf: sal.employeePf, employerPf: sal.employerPf, employeeEsic: sal.employeeEsic,
+        employerEsic: sal.employerEsic, professionalTax: sal.professionalTax, minimumBonus: sal.minimumBonus,
+      });
+      assert.equal(pay.grossSalary - st.employeePf - st.employeeEsic, pay.totalNetSalary, 'gross - employee PF - employee ESIC = net salary (G)');
+      assert.equal(pay.grossSalary + st.employerPf + st.employerEsic + st.professionalTax + st.minimumBonus, pay.monthlyCtc, 'gross + employer side = CTC');
+    }
+  });
+
   test('late: flagged against shift start + grace, still PRESENT, counted in payroll (no late penalty rule exists)', () => {
     const { day, pay } = run({ '2026-09-02': { firstIn: '10:30', lastOut: '18:30', workMinutes: 480 } });
     const d = day('2026-09-02');
@@ -104,7 +141,7 @@ describe('payroll edge cases (real resolver + real payroll formula)', () => {
     assert.equal(fixed.day('2026-09-02').source, 'ADJUSTMENT');
   });
 
-  test('overtime: minutes beyond the standard day; paid at (basic+da)/26/hours x multiplier; off when OT is disabled', () => {
+  test('overtime: punched minutes inside the shift OT window; paid at (basic+da)/26/hours x multiplier; off when OT is disabled', () => {
     const facts = { '2026-09-03': { firstIn: '09:00', lastOut: '19:00', workMinutes: 600 } as DayFacts };
     const on = run(facts);
     assert.equal(on.day('2026-09-03').overtimeMinutes, 90);
@@ -124,7 +161,7 @@ describe('payroll edge cases (real resolver + real payroll formula)', () => {
     assert.equal(d.status, 'PRESENT');
     assert.equal(d.isLate, false);
     assert.equal(d.earlyCheckoutMinutes, 0);
-    assert.equal(d.overtimeMinutes, 5);
+    assert.equal(d.overtimeMinutes, 0, 'overnight shifts have no overtime windows');
     assert.equal(pay.weeklyOffs, 0, 'the overnight policy here has no weekly off');
     const late = run({ '2026-09-02': { firstIn: '23:30', lastOut: '07:30', workMinutes: 480 } }, night).day('2026-09-02');
     assert.equal(late.isLate, true);

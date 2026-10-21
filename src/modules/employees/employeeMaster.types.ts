@@ -21,6 +21,7 @@ export interface EmployeeProfile {
   phone?: string;
   dob?: string;
   doj?: string; // Date of joining, YYYY-MM-DD
+  lastWorkingDay?: string; // Last day of employment, YYYY-MM-DD (inclusive). Later days are outside employment, not absence.
   department?: string;
   designation?: string;
   location?: string; // canonical siteId
@@ -55,7 +56,6 @@ export interface EmployeeProfile {
   // Overtime
   otEligible: boolean;
   otMultiplier?: number;  // e.g. 1.5 / 2 (multiplier of the hourly wage)
-  otRatePerHour?: number; // absolute rupee rate per hour; wins over the multiplier when > 0
 
   // Bank & statutory
   bankName?: string;
@@ -74,8 +74,8 @@ export interface EmployeeProfile {
 /** Fields a client may send. Anything else is rejected, never written. */
 export const PERSONAL_FIELDS = ['name', 'email', 'phone', 'dob', 'gender', 'bloodGroup', 'emergencyContact'] as const;
 export const EMPLOYMENT_FIELDS = [
-  'doj', 'department', 'designation', 'location', 'operationsCategory', 'managerEmpCode', 'managerName',
-  'shiftName', 'status', 'otEligible', 'otMultiplier', 'otRatePerHour', 'notes',
+  'doj', 'lastWorkingDay', 'department', 'designation', 'location', 'operationsCategory', 'managerEmpCode', 'managerName',
+  'shiftName', 'status', 'otEligible', 'otMultiplier', 'notes',
 ] as const;
 export const SALARY_FIELDS = [
   'monthlyCtc', 'basicSalary', 'da', 'hra', 'specialAllowance', 'otherAllowance',

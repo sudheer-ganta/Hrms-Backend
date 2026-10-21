@@ -7,6 +7,7 @@ import employeeRouter from '../modules/employees/employeeMaster.routes.js';
 import payrollRouter from '../modules/payroll/payroll.routes.js';
 import requestsRouter from '../modules/requests/requests.routes.js';
 import authRouter from '../modules/auth/auth.routes.js';
+import realtimeRouter from '../modules/realtime/realtime.routes.js';
 import { isDbConnected } from '../config/db.js';
 
 const router = Router();
@@ -24,5 +25,6 @@ router.use('/settings', policyRouter);
 router.use('/employees', employeeRouter);
 router.use('/payroll', payrollRouter);
 router.use('/requests', requestsRouter);
+router.use('/realtime', realtimeRouter);
 
 export default router;

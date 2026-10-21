@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import apiRouter from './routes/index.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler, apiNotFound } from './middleware/errorHandler.js';
+import { revisionService } from './modules/realtime/revision.service.js';
 import { ENV } from './config/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,23 @@ export const createApp = (): Express => {
   app.use(express.json({ limit: '300kb' }));
   app.use(express.urlencoded({ extended: false, limit: '100kb' }));
   app.use(requestLogger);
+
+  // Automatically bump real-time data revision for any successful database mutation
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      const method = req.method.toUpperCase();
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && res.statusCode >= 200 && res.statusCode < 300) {
+        const url = req.originalUrl || req.url || '';
+        // Skip previews, logins, and stream endpoints
+        if (!url.includes('/auth/login') && !url.includes('/preview') && !url.includes('/realtime')) {
+          const cleanPath = url.split('?')[0].replace(/^\/api\/?/, '');
+          const scope = cleanPath.split('/')[0] || 'general';
+          revisionService.bump(scope);
+        }
+      }
+    });
+    next();
+  });
 
   app.use('/api', apiRouter);
   app.use('/api', apiNotFound);

@@ -22,6 +22,7 @@ const toRequest = (doc: any): AttendanceRegularizationRequest => {
 };
 
 const MAX_RANGE_DAYS = 31;
+const MAX_LISTED_REQUESTS = 1000;
 
 export class RequestsService {
   public async getRequests(filter: { empCode?: string; status?: string } = {}): Promise<AttendanceRegularizationRequest[]> {
@@ -29,7 +30,8 @@ export class RequestsService {
     const q: any = {};
     if (filter.empCode) q.empCode = normalizeEmpCode(filter.empCode);
     if (filter.status) q.status = filter.status;
-    const docs = await RequestModel.find(q).sort({ createdAt: -1 }).lean();
+    // Newest first and bounded: the list must not grow without limit as years of history accumulate.
+    const docs = await RequestModel.find(q).sort({ createdAt: -1 }).limit(MAX_LISTED_REQUESTS).lean();
     return docs.map(toRequest);
   }
 

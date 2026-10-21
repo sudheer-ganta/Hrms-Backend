@@ -71,6 +71,11 @@ await punch('E001', E2E_DATES.weekday, '10:20', '14:30'); // 250 min, late under
 await punch('E002', E2E_DATES.weekday, '09:30', '16:00'); // 390 min
 await punch('E001', E2E_DATES.sunday, '09:00', '17:30'); // worked a weekly off
 await punch('E002', E2E_DATES.holiday, '09:00', '17:30'); // worked a paid holiday
+// A long day for the overtime flow: both stay until 9:15 PM (overtime only for whoever has OT switched on).
+const otDay = dates.find((d) => dayNameOf(d) === 'TUESDAY')!;
+await punch('E001', otDay, '09:00', '21:15');
+await punch('E002', otDay, '09:00', '21:15');
+console.log(`E2E overtime day: ${otDay}`);
 console.log(`E2E seed: month ${month}, weekday ${E2E_DATES.weekday}, sunday ${E2E_DATES.sunday}, holiday ${E2E_DATES.holiday}`);
 
 const server = http.createServer(createApp());

@@ -5,11 +5,14 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from server/.env or current working directory
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Load environment variables from server/.env or current working directory.
+// HRMS_SKIP_DOTENV=1 (set by the test harness) guarantees automated tests can never pick up a real .env.
+if (process.env.HRMS_SKIP_DOTENV !== '1') {
+  dotenv.config();
+  dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+}
 
 /**
  * A vendor (e-TimeOffice) login. Credentials live ONLY in the environment, never in
@@ -100,6 +103,16 @@ export const assertEnv = (): void => {
       'JWT_SECRET must be set to a random string of at least 32 characters. Generate one with:\n' +
         '  node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"'
     );
+  }
+  if (ENV.IS_PRODUCTION) {
+    // The localhost default is for development only; production must never silently start against it.
+    if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI must be set in production.');
+    if (/^(.)\1+$/.test(ENV.JWT_SECRET) || /change[-_ ]?me|secret-secret|example/i.test(ENV.JWT_SECRET)) {
+      throw new Error('JWT_SECRET looks like a placeholder. Generate a random one.');
+    }
+    if (ENV.SEED_SUPERADMIN_PASSWORD) {
+      console.warn('[Config] SEED_SUPERADMIN_PASSWORD is still set in the environment. Remove it after the first start.');
+    }
   }
 };
 

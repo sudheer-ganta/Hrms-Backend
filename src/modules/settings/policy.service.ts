@@ -1,7 +1,10 @@
 import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
 import { PolicyModel } from './policy.model.js';
-import { HRMSPolicySettings, CompanyHoliday, ShiftConfig, HolidayType } from './policy.types.js';
+import { HRMSPolicySettings, CompanyHoliday, ShiftConfig, HolidayType, TimeWindow, PfConfig, PfCeilingRow } from './policy.types.js';
+import { PAYROLL_RULES } from '../payroll/payroll.config.js';
+import { pfCeilingOn } from '../payroll/pfRule.js';
+import type { PfTerms } from '../employees/salary.js';
 import { ApiError } from '../../utils/apiError.js';
 import { DAY_NAME_LIST, DayName, TIME_RE, isValidBusinessDate, hhmmToMinutes } from '../../utils/istTime.js';
 import { requireDb } from '../../config/db.js';
@@ -20,8 +23,9 @@ export const DEFAULT_SETTINGS: HRMSPolicySettings = {
     halfDayThresholdMinutes: 180,
     fullDayThresholdMinutes: 360,
     minCheckoutForFullDay: '16:00',
-    breakDurationMinutes: 60,
+    otWindows: [],
   },
+  shifts: [],
   overtime: { enabled: true, hoursPerDay: 8 },
   offDayWork: { weeklyOff: { recognition: 'MANUAL' }, paidHoliday: { recognition: 'MANUAL' } },
   leaves: { casualLeave: 12, sickLeave: 12, earnedLeave: 15, compOff: 2 },
@@ -29,8 +33,32 @@ export const DEFAULT_SETTINGS: HRMSPolicySettings = {
   holidays: [],
   scheduler: { enabled: true, intervalMinutes: 5 },
   ess: { geofenceMode: 'ENFORCE' },
+  // Opening values reproduce payroll.config.ts; from here on HR edits them in Settings instead of the code.
+  statutory: {
+    pf: {
+      employeeRatePct: PAYROLL_RULES.pfRate * 100,
+      epsRatePct: 8.33,
+      adminRatePct: 0.5,
+      edliRatePct: 0.5,
+      ceilings: PAYROLL_RULES.pfCeilings.map((c) => ({ ...c })),
+    },
+  },
   updatedAt: new Date(0).toISOString(),
 };
+
+/** The PF rules payroll should use: the policy's, or the defaults for a policy that predates the setting. */
+export const pfPolicy = (policy: HRMSPolicySettings): PfConfig => policy?.statutory?.pf ?? DEFAULT_SETTINGS.statutory.pf;
+
+/** The PF rate and the ceiling in force on `isoDate`: what sizes the employer PF in a CTC-to-gross derivation. */
+export const pfSalaryTerms = (policy: HRMSPolicySettings, isoDate: string): PfTerms => {
+  const pf = pfPolicy(policy);
+  return { rate: pctToRate(pf.employeeRatePct), ceiling: pfCeilingOn(isoDate, pf.ceilings) };
+};
+
+/** 12 (percent) → 0.12, without float noise (8.33 / 100 is not exactly 0.0833). */
+export const pctToRate = (pct: number): number => Number((pct / 100).toFixed(6));
+
+export const BASE_PF_CEILING_DATE = '1900-01-01';
 
 /**
  * Standard work-day length in hours, derived from shift start/end. Single source of
@@ -54,6 +82,35 @@ export function getShiftStandardHours(shift: ShiftConfig): number {
 
 export const isOvernightShift = (shift: ShiftConfig): boolean => shiftEndMinutes(shift) <= shiftStartMinutes(shift);
 
+/**
+ * Overtime minutes for one day: the part of [firstIn, lastOut] (minute-of-day) that lies inside the shift's OT windows.
+ * Same-day only; overnight shifts have no overtime windows.
+ */
+export function overtimeMinutesIn(shift: ShiftConfig, firstIn: number, lastOut: number): number {
+  if (isOvernightShift(shift) || lastOut <= firstIn) return 0;
+  let total = 0;
+  for (const w of shift?.otWindows || []) {
+    const s = hhmmToMinutes(w?.start);
+    const e = hhmmToMinutes(w?.end);
+    if (s === null || e === null || e <= s) continue;
+    total += Math.max(0, Math.min(lastOut, e) - Math.max(firstIn, s));
+  }
+  return total;
+}
+
+/** The named shift an employee is on, or the default shift. Matching ignores case and surrounding spaces. */
+export function namedShift(policy: HRMSPolicySettings, shiftName?: string | null): ShiftConfig | undefined {
+  const want = String(shiftName ?? '').trim().toLowerCase();
+  if (!want) return undefined;
+  return (policy.shifts || []).find((s) => s.shiftName.trim().toLowerCase() === want);
+}
+
+/** The policy as one employee sees it: identical, except `shift` is the employee's own shift. */
+export function policyForShift(policy: HRMSPolicySettings, shiftName?: string | null): HRMSPolicySettings {
+  const own = namedShift(policy, shiftName);
+  return own ? { ...policy, shift: own } : policy;
+}
+
 /** Minute-of-day after which a first punch counts as late (shift start + grace). */
 export const lateThresholdMinutes = (shift: ShiftConfig): number =>
   shiftStartMinutes(shift) + (shift?.gracePeriodMinutes ?? 0);
@@ -72,24 +129,47 @@ const normalizeHoliday = (h: any): CompanyHoliday => ({
   paid: h.paid === undefined ? true : Boolean(h.paid), // legacy rows were all paid days off
 });
 
+const normalizeWindows = (raw: any): TimeWindow[] =>
+  (Array.isArray(raw) ? raw : [])
+    .filter((w: any) => w && TIME_RE.test(String(w.start)) && TIME_RE.test(String(w.end)))
+    .map((w: any) => ({ start: String(w.start), end: String(w.end) }));
+
+/** Complete, typed shift from stored/raw data; anything missing or malformed falls back to `base`. */
+function normalizeShift(raw: any, base: ShiftConfig): ShiftConfig {
+  const s = { ...base, ...(raw || {}) };
+  const positive = (v: any, d: number) => (typeof v === 'number' && v > 0 ? v : d);
+  return {
+    shiftName: String(s.shiftName),
+    startTime: TIME_RE.test(s.startTime) ? s.startTime : base.startTime,
+    endTime: TIME_RE.test(s.endTime) ? s.endTime : base.endTime,
+    gracePeriodMinutes: Number(s.gracePeriodMinutes ?? base.gracePeriodMinutes),
+    halfDayThresholdMinutes: positive(s.halfDayThresholdMinutes, base.halfDayThresholdMinutes),
+    fullDayThresholdMinutes: positive(s.fullDayThresholdMinutes, base.fullDayThresholdMinutes),
+    minCheckoutForFullDay: s.minCheckoutForFullDay && TIME_RE.test(s.minCheckoutForFullDay) ? s.minCheckoutForFullDay : undefined,
+    otWindows: normalizeWindows(s.otWindows),
+  };
+}
+
+/** Ascending ceiling history whose first row is in force from the beginning; falls back to `base` if empty/malformed. */
+function normalizeCeilings(raw: any, base: PfCeilingRow[]): PfCeilingRow[] {
+  const rows = (Array.isArray(raw) ? raw : [])
+    .filter((r: any) => r && isValidBusinessDate(r.from) && typeof r.ceiling === 'number' && r.ceiling > 0)
+    .map((r: any) => ({ from: String(r.from), ceiling: Number(r.ceiling) }))
+    .sort((a, b) => a.from.localeCompare(b.from));
+  if (!rows.length) return base.map((r) => ({ ...r }));
+  rows[0] = { ...rows[0], from: BASE_PF_CEILING_DATE };
+  return rows;
+}
+
 // Explicit allow-list per sub-object so removed legacy fields can never leak out of stored documents.
 function mergeWithDefaults(doc: any): HRMSPolicySettings {
   const c = doc || {};
   const D = DEFAULT_SETTINGS;
   const positive = (v: any, d: number) => (typeof v === 'number' && v > 0 ? v : d);
-  const shift = { ...D.shift, ...(c.shift || {}) };
   return {
     version: positive(c.version, 1),
-    shift: {
-      shiftName: String(shift.shiftName),
-      startTime: TIME_RE.test(shift.startTime) ? shift.startTime : D.shift.startTime,
-      endTime: TIME_RE.test(shift.endTime) ? shift.endTime : D.shift.endTime,
-      gracePeriodMinutes: Number(shift.gracePeriodMinutes ?? D.shift.gracePeriodMinutes),
-      halfDayThresholdMinutes: positive(shift.halfDayThresholdMinutes, D.shift.halfDayThresholdMinutes),
-      fullDayThresholdMinutes: positive(shift.fullDayThresholdMinutes, D.shift.fullDayThresholdMinutes),
-      minCheckoutForFullDay: shift.minCheckoutForFullDay && TIME_RE.test(shift.minCheckoutForFullDay) ? shift.minCheckoutForFullDay : undefined,
-      breakDurationMinutes: Number(shift.breakDurationMinutes ?? D.shift.breakDurationMinutes),
-    },
+    shift: normalizeShift(c.shift, D.shift),
+    shifts: (Array.isArray(c.shifts) ? c.shifts : []).map((s: any) => normalizeShift(s, D.shift)),
     overtime: {
       enabled: c.overtime?.enabled ?? D.overtime.enabled,
       hoursPerDay: positive(c.overtime?.hoursPerDay, D.overtime.hoursPerDay),
@@ -112,6 +192,15 @@ function mergeWithDefaults(doc: any): HRMSPolicySettings {
       intervalMinutes: positive(c.scheduler?.intervalMinutes, D.scheduler.intervalMinutes),
     },
     ess: { geofenceMode: c.ess?.geofenceMode === 'OFF' ? 'OFF' : 'ENFORCE' },
+    statutory: {
+      pf: {
+        employeeRatePct: positive(c.statutory?.pf?.employeeRatePct, D.statutory.pf.employeeRatePct),
+        epsRatePct: positive(c.statutory?.pf?.epsRatePct, D.statutory.pf.epsRatePct),
+        adminRatePct: Number(c.statutory?.pf?.adminRatePct ?? D.statutory.pf.adminRatePct),
+        edliRatePct: Number(c.statutory?.pf?.edliRatePct ?? D.statutory.pf.edliRatePct),
+        ceilings: normalizeCeilings(c.statutory?.pf?.ceilings, D.statutory.pf.ceilings),
+      },
+    },
     updatedAt: c.updatedAt ? String(c.updatedAt) : D.updatedAt,
   };
 }
@@ -124,27 +213,55 @@ export function validatePolicyUpdate(input: unknown): Partial<HRMSPolicySettings
     throw ApiError.validation(`Invalid ${field}.`, [{ field, issue }]);
   };
 
-  if (body.shift !== undefined) {
-    const s = requireObject(body.shift, 'shift');
+  /** Validates the fields of one shift object that are present; `path` prefixes error fields. */
+  const validateShiftFields = (raw: unknown, path: string): Record<string, any> => {
+    const s = requireObject(raw, path);
     const shift: any = {};
-    if (s.shiftName !== undefined) shift.shiftName = String(s.shiftName).trim().slice(0, 80) || bad('shift.shiftName', 'Required');
+    if (s.shiftName !== undefined) shift.shiftName = String(s.shiftName).trim().slice(0, 80) || bad(`${path}.shiftName`, 'Required');
     for (const f of ['startTime', 'endTime'] as const) {
-      if (s[f] !== undefined) { if (typeof s[f] !== 'string' || !TIME_RE.test(s[f] as string)) bad(`shift.${f}`, 'Must be HH:mm'); shift[f] = s[f]; }
+      if (s[f] !== undefined) { if (typeof s[f] !== 'string' || !TIME_RE.test(s[f] as string)) bad(`${path}.${f}`, 'Must be HH:mm'); shift[f] = s[f]; }
     }
     if (s.minCheckoutForFullDay !== undefined) {
       if (s.minCheckoutForFullDay === '' || s.minCheckoutForFullDay === null) shift.minCheckoutForFullDay = '';
-      else if (typeof s.minCheckoutForFullDay !== 'string' || !TIME_RE.test(s.minCheckoutForFullDay)) bad('shift.minCheckoutForFullDay', 'Must be HH:mm');
+      else if (typeof s.minCheckoutForFullDay !== 'string' || !TIME_RE.test(s.minCheckoutForFullDay)) bad(`${path}.minCheckoutForFullDay`, 'Must be HH:mm');
       else shift.minCheckoutForFullDay = s.minCheckoutForFullDay;
     }
-    const grace = optionalNumber(s.gracePeriodMinutes, 'shift.gracePeriodMinutes', { min: 0, max: 600 });
-    const half = optionalNumber(s.halfDayThresholdMinutes, 'shift.halfDayThresholdMinutes', { min: 1, max: 1440 });
-    const full = optionalNumber(s.fullDayThresholdMinutes, 'shift.fullDayThresholdMinutes', { min: 1, max: 1440 });
-    const brk = optionalNumber(s.breakDurationMinutes, 'shift.breakDurationMinutes', { min: 0, max: 600 });
+    const grace = optionalNumber(s.gracePeriodMinutes, `${path}.gracePeriodMinutes`, { min: 0, max: 600 });
+    const half = optionalNumber(s.halfDayThresholdMinutes, `${path}.halfDayThresholdMinutes`, { min: 1, max: 1440 });
+    const full = optionalNumber(s.fullDayThresholdMinutes, `${path}.fullDayThresholdMinutes`, { min: 1, max: 1440 });
     if (grace !== undefined) shift.gracePeriodMinutes = grace;
     if (half !== undefined) shift.halfDayThresholdMinutes = half;
     if (full !== undefined) shift.fullDayThresholdMinutes = full;
-    if (brk !== undefined) shift.breakDurationMinutes = brk;
-    out.shift = shift;
+    if (s.otWindows !== undefined) {
+      if (!Array.isArray(s.otWindows) || s.otWindows.length > 6) bad(`${path}.otWindows`, 'Must be a list of at most 6 overtime windows');
+      shift.otWindows = (s.otWindows as unknown[]).map((raw, i) => {
+        const w = requireObject(raw, `${path}.otWindows[${i}]`);
+        if (typeof w.start !== 'string' || !TIME_RE.test(w.start)) bad(`${path}.otWindows[${i}].start`, 'Must be HH:mm');
+        if (typeof w.end !== 'string' || !TIME_RE.test(w.end)) bad(`${path}.otWindows[${i}].end`, 'Must be HH:mm');
+        if ((hhmmToMinutes(w.end as string) ?? 0) <= (hhmmToMinutes(w.start as string) ?? 0)) bad(`${path}.otWindows[${i}]`, 'Overtime must end after it starts (same day)');
+        return { start: w.start as string, end: w.end as string };
+      });
+    }
+    if (shift.halfDayThresholdMinutes !== undefined && shift.fullDayThresholdMinutes !== undefined && shift.halfDayThresholdMinutes > shift.fullDayThresholdMinutes) {
+      bad(`${path}.halfDayThresholdMinutes`, 'Must not exceed the full-day threshold');
+    }
+    return shift;
+  };
+
+  if (body.shift !== undefined) out.shift = validateShiftFields(body.shift, 'shift');
+  if (body.shifts !== undefined) {
+    if (!Array.isArray(body.shifts) || body.shifts.length > 10) bad('shifts', 'Must be a list of at most 10 shifts');
+    const seen = new Set<string>();
+    out.shifts = (body.shifts as unknown[]).map((raw, i) => {
+      const fields = validateShiftFields(raw, `shifts[${i}]`);
+      if (!fields.shiftName) bad(`shifts[${i}].shiftName`, 'Required');
+      const key = String(fields.shiftName).toLowerCase();
+      if (seen.has(key)) bad(`shifts[${i}].shiftName`, 'Shift names must be unique');
+      seen.add(key);
+      const merged = normalizeShift(fields, DEFAULT_SETTINGS.shift);
+      if (merged.halfDayThresholdMinutes > merged.fullDayThresholdMinutes) bad(`shifts[${i}].halfDayThresholdMinutes`, 'Must not exceed the full-day threshold');
+      return merged;
+    });
   }
   if (body.overtime !== undefined) {
     const o = requireObject(body.overtime, 'overtime');
@@ -152,10 +269,6 @@ export function validatePolicyUpdate(input: unknown): Partial<HRMSPolicySettings
     if (o.enabled !== undefined) out.overtime.enabled = Boolean(o.enabled);
     const h = optionalNumber(o.hoursPerDay, 'overtime.hoursPerDay', { min: 1, max: 24 });
     if (h !== undefined) out.overtime.hoursPerDay = h;
-    if (o.recognition !== undefined) {
-      if (o.recognition !== 'MANUAL' && o.recognition !== 'AUTOMATIC') throw ApiError.validation('overtime.recognition must be MANUAL or AUTOMATIC.');
-      out.overtime.recognition = o.recognition;
-    }
   }
   if (body.offDayWork !== undefined) {
     const w = requireObject(body.offDayWork, 'offDayWork');
@@ -194,6 +307,43 @@ export function validatePolicyUpdate(input: unknown): Partial<HRMSPolicySettings
     if (e.geofenceMode !== undefined) {
       if (e.geofenceMode !== 'ENFORCE' && e.geofenceMode !== 'OFF') bad('ess.geofenceMode', 'ENFORCE or OFF');
       out.ess = { geofenceMode: e.geofenceMode };
+    }
+  }
+  if (body.statutory !== undefined) {
+    const st = requireObject(body.statutory, 'statutory');
+    out.statutory = {};
+    if (st.pf !== undefined) {
+      const p = requireObject(st.pf, 'statutory.pf');
+      const pf: any = {};
+      const employee = optionalNumber(p.employeeRatePct, 'statutory.pf.employeeRatePct', { min: 0.01, max: 100 });
+      const eps = optionalNumber(p.epsRatePct, 'statutory.pf.epsRatePct', { min: 0, max: 100 });
+      const admin = optionalNumber(p.adminRatePct, 'statutory.pf.adminRatePct', { min: 0, max: 10 });
+      const edli = optionalNumber(p.edliRatePct, 'statutory.pf.edliRatePct', { min: 0, max: 10 });
+      if (employee !== undefined) pf.employeeRatePct = employee;
+      if (eps !== undefined) pf.epsRatePct = eps;
+      if (admin !== undefined) pf.adminRatePct = admin;
+      if (edli !== undefined) pf.edliRatePct = edli;
+      if (pf.employeeRatePct !== undefined && pf.epsRatePct !== undefined && pf.epsRatePct > pf.employeeRatePct) {
+        bad('statutory.pf.epsRatePct', 'Pension share cannot exceed the PF rate');
+      }
+      if (p.ceilings !== undefined) {
+        if (!Array.isArray(p.ceilings) || p.ceilings.length < 1 || p.ceilings.length > 20) bad('statutory.pf.ceilings', 'Must be a list of 1 to 20 ceilings');
+        const seen = new Set<string>();
+        const rows = (p.ceilings as unknown[]).map((raw, i) => {
+          const r = requireObject(raw, `statutory.pf.ceilings[${i}]`);
+          if (!isValidBusinessDate(r.from)) bad(`statutory.pf.ceilings[${i}].from`, 'Must be YYYY-MM-DD');
+          const ceiling = optionalNumber(r.ceiling, `statutory.pf.ceilings[${i}].ceiling`, { min: 1, max: 10_000_000 });
+          if (ceiling === undefined) bad(`statutory.pf.ceilings[${i}].ceiling`, 'Required');
+          return { from: r.from as string, ceiling: ceiling as number };
+        }).sort((a, b) => a.from.localeCompare(b.from));
+        for (const r of rows) {
+          if (seen.has(r.from)) bad('statutory.pf.ceilings', `Two ceilings start on ${r.from}`);
+          seen.add(r.from);
+        }
+        rows[0] = { ...rows[0], from: BASE_PF_CEILING_DATE }; // the first row is "in force from the beginning"
+        pf.ceilings = rows;
+      }
+      out.statutory.pf = pf;
     }
   }
   // holidays are managed ONLY through the dedicated add/remove operations.

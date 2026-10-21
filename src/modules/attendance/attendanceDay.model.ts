@@ -18,7 +18,6 @@ export interface IAttendanceDay {
   workMinutes: number;
   punchCount: number;
   vendorStatus: string | null;
-  vendorOvertimeMinutes: number | null;
   vendorLateMinutes: number | null;
   siteId: string | null;
   sourceIds: string[];
@@ -42,7 +41,6 @@ const AttendanceDaySchema = new Schema<AttendanceDayDocument>(
     workMinutes: { type: Number, default: 0 },
     punchCount: { type: Number, default: 0 },
     vendorStatus: { type: String, default: null },
-    vendorOvertimeMinutes: { type: Number, default: null },
     vendorLateMinutes: { type: Number, default: null },
     siteId: { type: String, default: null, lowercase: true },
     sourceIds: { type: [String], default: [] },

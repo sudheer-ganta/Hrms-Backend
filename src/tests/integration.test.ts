@@ -533,10 +533,15 @@ describe('HRMS end-to-end (real app, real MongoDB)', { skip: SKIP }, () => {
       assert.equal(re.body.data.status, 'REOPENED');
       const live = (await h.call('GET', `/payroll/employee/E001?month=${SEPT}`, { token: t().founder })).body.data;
       assert.equal(live.payrollStatus, 'LIVE');
+      assert.equal(live.monthlyCtc, 30000, 'a reopened September is still priced with the September salary, not the later raise');
+      const oct = (await h.call('GET', `/payroll/employee/E001?month=${istToday().slice(0, 7)}`, { token: t().founder })).body.data;
+      assert.equal(oct.monthlyCtc, 90000, 'the current month uses the new salary');
       ok(await h.call('POST', `/payroll/adjustments/${SEPT}`, { token: t().founder, body: { reason: 'Reopened adjustment (test)', adjustments: { E001: { otHours: 1 } } } }));
       const close2 = await h.call('POST', `/payroll/runs/${SEPT}/close`, { token: t().founder, body: { acknowledgeMissingAttendance: true } });
       ok(close2);
       assert.equal(close2.body.data.currentVersion, 2);
+      const v2 = (await h.call('GET', `/payroll/runs/${SEPT}/versions/2`, { token: t().founder })).body.data;
+      assert.equal(v2.snapshot.find((p: any) => p.empCode === 'E001').monthlyCtc, 30000, 're-closing September keeps the September salary');
       const versions = (await h.call('GET', `/payroll/runs/${SEPT}/versions`, { token: t().founder })).body.data;
       assert.deepEqual(versions.map((v: any) => v.version), [2, 1]);
       const v1 = (await h.call('GET', `/payroll/runs/${SEPT}/versions/1`, { token: t().founder })).body.data;

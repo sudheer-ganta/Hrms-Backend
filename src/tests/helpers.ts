@@ -3,6 +3,7 @@
  * Set MONGOMS_SYSTEM_BINARY (+ MONGOMS_VERSION) to a local mongod if automatic download is unavailable.
  */
 process.env.NODE_ENV = 'test';
+process.env.HRMS_SKIP_DOTENV = '1'; // tests must never read a real .env (database URI, vendor credentials)
 process.env.JWT_SECRET = 'integration-test-secret-integration-test-secret';
 process.env.SCHEDULER_ENABLED = 'false';
 for (const s of ['OFFICE', 'BUDIGERE', 'BIDARAHALLI']) {
@@ -14,6 +15,7 @@ process.env.MONGODB_URI = 'mongodb://127.0.0.1:1/never-used';
 
 import fs from 'fs';
 import http from 'http';
+import { spawn } from 'child_process';
 import { AddressInfo } from 'net';
 import bcrypt from 'bcryptjs';
 
@@ -114,4 +116,23 @@ export async function startMongoOnly() {
   const uri = mongod.getUri('legacy');
   const client = await MongoClient.connect(uri);
   return { uri, db: client.db('legacy'), stop: async () => { await client.close(); await mongod.stop(); } };
+}
+
+/**
+ * Runs a node script WITHOUT blocking this process' event loop.
+ * Why not spawnSync: the in-memory mongod's stdout is piped to this process; while the loop is blocked nobody drains
+ * that pipe, so a chatty mongod fills it and freezes (the child then hangs until its timeout).
+ */
+export function runNodeScript(
+  script: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs = 120_000
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['--import', 'tsx', script, ...args], { env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (b) => { stdout += b; });
+    child.stderr.on('data', (b) => { stderr += b; });
+    const timer = setTimeout(() => child.kill(), timeoutMs);
+    child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
+  });
 }

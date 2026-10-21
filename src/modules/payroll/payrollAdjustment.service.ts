@@ -7,6 +7,8 @@ import { requireDb } from '../../config/db.js';
 import { isValidEmpCode, normalizeEmpCode } from '../../utils/empCode.js';
 import { optionalNumber, requireMonth, requireObject } from '../../utils/validate.js';
 
+const PAY_ITEM_KEYS = ['salaryAdvance', 'otherDeduction', 'lwf', 'attendanceBonus', 'increment'] as const;
+
 /** Validates the manual OT/Sunday adjustments payload (employee code → adjustment). */
 export function validateAdjustments(input: unknown): Record<string, EmployeeOtAdjustment> {
   const body = requireObject(input, 'adjustments');
@@ -18,12 +20,14 @@ export function validateAdjustments(input: unknown): Record<string, EmployeeOtAd
     const v = requireObject(value, `adjustments.${rawCode}`);
     const adj: EmployeeOtAdjustment = {};
     const otHours = optionalNumber(v.otHours, `${rawCode}.otHours`, { min: 0, max: 744 });
-    const totalWorkHours = optionalNumber(v.totalWorkHours, `${rawCode}.totalWorkHours`, { min: 0, max: 744 });
     const multiplier = optionalNumber(v.multiplier, `${rawCode}.multiplier`, { min: 0, max: 10 });
     const weeklyOffWorkDays = optionalNumber(v.weeklyOffWorkDays ?? v.sundayDays, `${rawCode}.weeklyOffWorkDays`, { min: 0, max: 31 }); // sundayDays = legacy alias
     const holidayWorkDays = optionalNumber(v.holidayWorkDays, `${rawCode}.holidayWorkDays`, { min: 0, max: 31 });
+    for (const key of PAY_ITEM_KEYS) {
+      const amount = optionalNumber(v[key], `${rawCode}.${key}`, { min: 0, max: 10_000_000 });
+      if (amount !== undefined) adj[key] = amount;
+    }
     if (otHours !== undefined) adj.otHours = otHours;
-    if (totalWorkHours !== undefined) adj.totalWorkHours = totalWorkHours;
     if (multiplier !== undefined) adj.multiplier = multiplier;
     if (weeklyOffWorkDays !== undefined) adj.weeklyOffWorkDays = weeklyOffWorkDays;
     if (holidayWorkDays !== undefined) adj.holidayWorkDays = holidayWorkDays;

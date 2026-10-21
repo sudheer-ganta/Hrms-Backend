@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { policyService, getShiftStandardHours, isOvernightShift, lateThresholdMinutes } from './policy.service.js';
+import { policyService, isOvernightShift, lateThresholdMinutes } from './policy.service.js';
+import { HRMSPolicySettings } from './policy.types.js';
 import { minutesToHhmm } from '../../utils/istTime.js';
 import { payrollRunService } from '../payroll/payrollRun.service.js';
 import { handle, ApiError } from '../../utils/apiError.js';
@@ -7,11 +8,18 @@ import { monthOf } from '../../utils/istTime.js';
 import { requireObject } from '../../utils/validate.js';
 import { validateHolidayInput } from './policy.service.js';
 
+/** Derived values are computed here so no client ever re-implements the shift math. */
+const withDerived = (p: HRMSPolicySettings) => ({
+  ...p,
+  derived: {
+    overnightShift: isOvernightShift(p.shift),
+    lateAfter: minutesToHhmm(lateThresholdMinutes(p.shift) % 1440),
+  },
+});
+
 export class PolicyController {
   public getSettings = handle(async (_req: Request, res: Response) => {
-    const p = policyService.getSettings();
-    // Derived values are computed here so no client ever re-implements the shift math.
-    res.json({ success: true, data: { ...p, derived: { standardDayHours: getShiftStandardHours(p.shift), overnightShift: isOvernightShift(p.shift), lateAfter: minutesToHhmm(lateThresholdMinutes(p.shift) % 1440) } } });
+    res.json({ success: true, data: withDerived(policyService.getSettings()) });
   });
 
   /**
@@ -20,7 +28,7 @@ export class PolicyController {
    */
   public updateSettings = handle(async (req: Request, res: Response) => {
     const updated = await policyService.updateSettings(req.body);
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: withDerived(updated) });
   });
 
   public addHoliday = handle(async (req: Request, res: Response) => {

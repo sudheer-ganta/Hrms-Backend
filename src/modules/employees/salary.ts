@@ -51,7 +51,16 @@ export interface SalaryBreakdown {
 const has = (v: unknown): v is number => v !== undefined && v !== null && Number.isFinite(Number(v));
 const n = (v: unknown): number => Number(v);
 
-export function computeSalaryBreakdown(input: SalaryInputs): SalaryBreakdown | null {
+/** The PF terms that size the employer PF carved out of CTC: the Settings rate and the PF wage ceiling in force. */
+export interface PfTerms {
+  rate: number;    // e.g. 0.12
+  ceiling: number; // e.g. 25000: employer PF is never more than rate x ceiling
+}
+
+/** The terms before PF became a setting (12% of a 15,000 ceiling = 1,800). Callers with a policy pass its terms instead. */
+const LEGACY_PF_TERMS: PfTerms = { rate: R.pfRate, ceiling: R.pfMonthlyCap / R.pfRate };
+
+export function computeSalaryBreakdown(input: SalaryInputs, pfTerms: PfTerms = LEGACY_PF_TERMS): SalaryBreakdown | null {
   const ctc = has(input.monthlyCtc) ? n(input.monthlyCtc) : 0;
   if (ctc <= 0) return null;
 
@@ -61,7 +70,7 @@ export function computeSalaryBreakdown(input: SalaryInputs): SalaryBreakdown | n
   const other = has(input.otherAllowance) ? n(input.otherAllowance) : 0;
   const bonus = has(input.minimumBonus) ? n(input.minimumBonus) : 0;
 
-  const erPf = has(input.employerPf) ? n(input.employerPf) : Math.min(R.pfMonthlyCap, Math.round(basic * R.pfRate));
+  const erPf = has(input.employerPf) ? n(input.employerPf) : Math.min(Math.round(pfTerms.ceiling * pfTerms.rate), Math.round(basic * pfTerms.rate));
   const eePf = has(input.employeePf) ? n(input.employeePf) : erPf;
 
   let gross = 0;

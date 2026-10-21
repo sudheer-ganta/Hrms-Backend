@@ -20,11 +20,14 @@ import { escapeRegex } from '../utils/validate.js';
 import { assertStrongPassword } from '../utils/password.js';
 import { toApiError, ApiError } from '../utils/apiError.js';
 import { EmployeeProfile } from '../modules/employees/employeeMaster.types.js';
+import { pfWagesForMonth } from '../modules/payroll/pfRule.js';
 
+// The default test shift pays overtime for time punched between 17:30 and 21:00.
 const policy = (over: Partial<HRMSPolicySettings> = {}): HRMSPolicySettings => ({
   ...DEFAULT_SETTINGS,
+  shift: { ...DEFAULT_SETTINGS.shift, otWindows: [{ start: '17:30', end: '21:00' }] },
   ...over,
-  overtime: { ...DEFAULT_SETTINGS.overtime, recognition: 'AUTOMATIC', ...(over.overtime || {}) },
+  overtime: { ...DEFAULT_SETTINGS.overtime, ...(over.overtime || {}) },
 });
 // 2026-09-02 is a Wednesday; 2026-09-06 is a Sunday.
 const TODAY = '2026-10-08';
@@ -149,6 +152,25 @@ describe('attendance resolver (the single authority)', () => {
     // vendor "A" with enough hours is re-derived by OUR policy
     assert.equal(day('2026-10-07', { firstIn: '09:00', lastOut: '17:30', workMinutes: 510, vendorStatus: 'A' }).status, 'PRESENT');
   });
+  test('the device\'s P / P-2 never overrides the Settings thresholds: the hours worked decide present, half day or absent', () => {
+    const at = (workMinutes: number, firstIn: string, lastOut: string, vendorStatus: string) =>
+      day('2026-10-07', { firstIn, lastOut, workMinutes, punchCount: 2, vendorStatus });
+    // device P, but 37 minutes (under the 180 half-day minimum) is absent, not a paid day
+    assert.equal(at(37, '08:59', '09:36', 'P').status, 'ABSENT');
+    // device P, 4 hours (between the 180 half-day and 360 full-day minimums, out before 16:00) is a half day
+    assert.equal(at(255, '09:01', '13:16', 'P').status, 'HALF_DAY');
+    // device P/2, but 6.7 hours worked and out after the 16:00 cutoff is a full day
+    assert.equal(at(402, '09:19', '16:01', 'P/2').status, 'PRESENT');
+    // the code is still kept as information
+    assert.equal(at(255, '09:01', '13:16', 'P').vendorStatus, 'P');
+    // a single swipe stays a paid, flagged Missed Punch whatever the device says
+    assert.equal(day('2026-10-07', { firstIn: '08:52', punchCount: 1, workMinutes: 0, vendorStatus: 'P' }).status, 'MISSED_PUNCH');
+    assert.equal(day('2026-10-07', { firstIn: '16:59', punchCount: 1, workMinutes: 0, vendorStatus: 'P/2' }).status, 'MISSED_PUNCH');
+    // device weekly-off / holiday / paid-leave codes still count (the policy does not know the device's roster)
+    assert.equal(day('2026-10-07', { vendorStatus: 'W' }).status, 'WEEKLY_OFF');
+    assert.equal(day('2026-10-07', { vendorStatus: 'H' }).status, 'HOLIDAY');
+    assert.equal(day('2026-10-07', { vendorStatus: 'CL' }).status, 'LEAVE_PAID');
+  });
   test('overnight shift 22:00-06:00 is a full day when policy is overnight', () => {
     const p = policy({ shift: { ...DEFAULT_SETTINGS.shift, startTime: '22:00', endTime: '06:00', minCheckoutForFullDay: '' } });
     assert.equal(getShiftStandardHours(p.shift), 8);
@@ -162,7 +184,7 @@ describe('attendance resolver (the single authority)', () => {
   });
   test('overtime honors the policy switch', () => {
     const f: DayFacts = { firstIn: '09:00', lastOut: '19:00', workMinutes: 600 };
-    assert.equal(day('2026-10-07', f).overtimeMinutes, 90); // 600 - 510
+    assert.equal(day('2026-10-07', f).overtimeMinutes, 90); // 17:30-19:00 inside the 17:30-21:00 window
     const off = policy({ overtime: { enabled: false, hoursPerDay: 8 } });
     assert.equal(day('2026-10-07', f, off).overtimeMinutes, 0);
   });
@@ -207,13 +229,20 @@ describe('payroll engine', () => {
   const full: DayFacts = { firstIn: '09:00', lastOut: '17:30', workMinutes: 510, punchCount: 2 };
   const allWorking = (): Record<string, DayFacts | undefined> => Object.fromEntries(daysInMonth('2026-09').map((d) => [d, full]));
 
-  test('perfect month: no LOP, net = gross - PF, payslip foots exactly', () => {
+  test('perfect month: no LOP, net = gross - PF - PT, payslip foots exactly', () => {
     const r = computeEmployeePayroll({ profile: profile(), month: '2026-09', days: month(allWorking()), policy: policy() });
     assert.equal(r.lopDays, 0);
     assert.equal(r.elapsedDays, 30);
     assert.equal(r.weeklyOffs, 4);
     const sal = computeSalaryBreakdown({ monthlyCtc: 30000 })!;
-    assert.equal(r.netPayable, Math.round(sal.grossSalary - sal.employeePf));
+    // statement method: PF follows the ceiling by date (15,000 to 16 Sep, 25,000 from 17 Sep: pfRule.ts), PT (earned gross >= 25000)
+    // is deducted, ESI does not apply above 21000
+    const pf = Math.round(pfWagesForMonth('2026-09', 30, Math.round(sal.grossSalary - sal.hra)).wages * 0.12);
+    assert.ok(pf > 1800, 'September PF is above the old 1,800 cap because the ceiling rose on 17 Sep');
+    assert.equal(r.pfDeduction, pf);
+    assert.equal(r.esiDeduction, 0);
+    assert.equal(r.ptDeduction, 200);
+    assert.equal(r.netPayable, Math.round(sal.grossSalary - pf - 200));
     assert.equal(r.payslip.totalEarnings - r.payslip.totalDeductions, r.payslip.netPay);
     assert.equal(r.payslip.netPay, r.netPayable);
   });
@@ -221,7 +250,7 @@ describe('payroll engine', () => {
   test('payslip foots to net pay with LOP, OT, Sunday and partial month', () => {
     const w = allWorking();
     w['2026-09-02'] = undefined; // absent
-    w['2026-09-03'] = { firstIn: '09:00', lastOut: '19:00', workMinutes: 600, vendorOvertimeMinutes: 90 } as DayFacts; // OT 1.5h
+    w['2026-09-03'] = { firstIn: '09:00', lastOut: '19:00', workMinutes: 600 } as DayFacts; // OT 1.5h
     const days = daysInMonth('2026-09').map((d) => resolveDay(d, w[d], { policy: policy(), today: '2026-09-20' })); // mid-month
     const r = computeEmployeePayroll({ profile: profile(), month: '2026-09', days, policy: policy(), adjustment: { weeklyOffWorkDays: 1 } });
     assert.equal(r.isProvisional, true);
@@ -234,7 +263,7 @@ describe('payroll engine', () => {
 
   test('OT = (Basic+DA)/26/8 x multiplier x hours', () => {
     const w = allWorking();
-    w['2026-09-03'] = { firstIn: '09:00', lastOut: '19:00', workMinutes: 600, vendorOvertimeMinutes: 120 } as DayFacts;
+    w['2026-09-03'] = { firstIn: '09:00', lastOut: '19:30', workMinutes: 630 } as DayFacts;
     const r = computeEmployeePayroll({ profile: profile({ da: 0 }), month: '2026-09', days: month(w), policy: policy() });
     const hourly = 15000 / 26 / 8;
     assert.equal(r.totalOtHours, 2);
@@ -251,12 +280,12 @@ describe('payroll engine', () => {
     assert.equal(r.payableDays, 29.5);
   });
 
-  test('PT: shown as employer-borne information, never as a phantom deduction', () => {
+  test('PT: deducted from net pay, on the earned gross including OT (statement method)', () => {
     const r = computeEmployeePayroll({ profile: profile(), month: '2026-09', days: month(allWorking()), policy: policy() });
     assert.equal(r.ptDeduction, 200);
-    assert.equal(r.ptDeductedFromNet, false);
-    assert.ok(!r.payslip.deductions.some((l) => l.code === 'PT'));
-    assert.ok(r.payslip.employerBorne.some((l) => l.code === 'PT'));
+    assert.equal(r.ptDeductedFromNet, true);
+    assert.ok(r.payslip.deductions.some((l) => l.code === 'PT' && l.amount === 200));
+    assert.ok(!r.payslip.employerBorne.some((l) => l.code === 'PT'));
   });
 
   test('paid leave is not LOP (1.0 payable); unpaid leave is 1.0 LOP', () => {
@@ -270,15 +299,15 @@ describe('payroll engine', () => {
     assert.equal(r.payableDays, 29);
   });
 
-  test('legacy otRatePerHour overload still honored; explicit otMultiplier wins', () => {
+  test('one OT rate: hourly wage x multiplier; this month\'s HR multiplier beats the employee\'s, which beats the company default', () => {
     const w = allWorking();
-    w['2026-09-03'] = { firstIn: '09:00', lastOut: '19:00', workMinutes: 600, vendorOvertimeMinutes: 60 } as DayFacts;
-    const legacy = computeEmployeePayroll({ profile: profile({ otRatePerHour: 1.5 }), month: '2026-09', days: month(w), policy: policy() });
-    assert.equal(legacy.otMultiplier, 1.5);
-    const explicit = computeEmployeePayroll({ profile: profile({ otMultiplier: 3 }), month: '2026-09', days: month(w), policy: policy() });
-    assert.equal(explicit.otMultiplier, 3);
-    const absolute = computeEmployeePayroll({ profile: profile({ otRatePerHour: 200 }), month: '2026-09', days: month(w), policy: policy() });
-    assert.equal(absolute.otRatePerHour, 200);
+    w['2026-09-03'] = { firstIn: '09:00', lastOut: '18:30', workMinutes: 570 } as DayFacts;
+    const run = (p: Partial<EmployeeProfile>, adjustment?: any) => computeEmployeePayroll({ profile: profile(p), month: '2026-09', days: month(w), policy: policy(), adjustment });
+    assert.equal(run({}).otMultiplier, 2, 'company default');
+    assert.equal(run({ otMultiplier: 3 }).otMultiplier, 3, 'employee multiplier');
+    assert.equal(run({ otMultiplier: 3 }, { multiplier: 1.5 }).otMultiplier, 1.5, 'HR override for the month');
+    const r = run({ otMultiplier: 3 });
+    assert.equal(r.otRatePerHour, Math.round((15000 / 26 / 8) * 3 * 100) / 100, 'rate shown on the payslip is the computed one');
   });
 
   test('no salary configured → zero pay, clearly labelled', () => {

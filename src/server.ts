@@ -33,13 +33,26 @@ const startServer = async (): Promise<void> => {
     console.log(`ColorMyles HRMS API listening on :${ENV.PORT} (${ENV.NODE_ENV})`);
   });
 
-  const shutdown = () => {
-    console.log('Shutting down gracefully...');
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received: shutting down gracefully...`);
     syncScheduler.stop(false);
-    server.close(() => process.exit(0));
+    // Hard stop if connections do not drain (Render sends SIGKILL after its own grace period anyway).
+    const force = setTimeout(() => { console.error('Graceful shutdown timed out; forcing exit.'); process.exit(1); }, 10_000);
+    force.unref();
+    server.close(async () => {
+      try { const { default: mongoose } = await import('mongoose'); await mongoose.disconnect(); } catch { /* already closed */ }
+      process.exit(0);
+    });
   };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  // A rejected promise nobody awaited must be visible, and must not leave the process in an unknown state.
+  process.on('unhandledRejection', (reason) => { console.error('[Process] Unhandled rejection:', reason instanceof Error ? reason.message : reason); });
+  process.on('uncaughtException', (err) => { console.error('[Process] Uncaught exception, exiting:', err.message); shutdown('uncaughtException'); });
 };
 
 startServer().catch((err) => {

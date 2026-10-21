@@ -12,13 +12,22 @@ export interface ShiftConfig {
   halfDayThresholdMinutes: number; // worked >= this => at least HALF_DAY
   fullDayThresholdMinutes: number; // worked >= this => PRESENT
   minCheckoutForFullDay?: string;  // checkout at/after this time (with >= half-day minutes) => PRESENT
-  breakDurationMinutes: number;
+  /**
+   * THE overtime rule: the minutes between an employee's first and last punch that fall inside one of these
+   * same-day windows are overtime. Time outside every window (the shift itself, a break, the gap before OT starts)
+   * is never overtime. A shift without windows has no overtime.
+   */
+  otWindows: TimeWindow[];
+}
+
+export interface TimeWindow {
+  start: string; // "19:00" IST wall clock
+  end: string;   // "21:00"
 }
 
 export interface OvertimeConfig {
   enabled: boolean;
   hoursPerDay: number; // OT hourly-wage divisor (default 8)
-  recognition?: 'MANUAL' | 'AUTOMATIC'; // MANUAL = 0 by default, HR enters in OT Calculator; AUTOMATIC = derived from biometric punches
 }
 
 /**
@@ -69,9 +78,34 @@ export interface EssConfig {
   geofenceMode: 'ENFORCE' | 'OFF';
 }
 
+/** One row of the PF wage ceiling history: this ceiling applies from `from` (YYYY-MM-DD) until the next row. */
+export interface PfCeilingRow {
+  from: string;
+  ceiling: number;
+}
+
+/**
+ * Provident Fund rules the government can change. All rates are percentages of the PF wages
+ * (e.g. 12 means 12%). The ceiling is date-effective so a change mid-month is prorated (payroll/pfRule.ts).
+ */
+export interface PfConfig {
+  employeeRatePct: number; // employee share; the employer pays the same amount
+  epsRatePct: number;      // part of the employer's share that goes to the pension scheme (EPS)
+  adminRatePct: number;    // employer PF admin charge
+  edliRatePct: number;     // employer EDLI contribution
+  /** Ascending by date; the first row is always 1900-01-01 (in force "from the beginning"). */
+  ceilings: PfCeilingRow[];
+}
+
+export interface StatutoryConfig {
+  pf: PfConfig;
+}
+
 export interface HRMSPolicySettings {
   version: number; // incremented on every change; stored in payroll snapshots
-  shift: ShiftConfig;
+  shift: ShiftConfig; // the default shift, used by everyone not assigned to a named shift below
+  /** Additional named shifts. An employee whose profile `shiftName` matches one uses it instead of `shift`. */
+  shifts: ShiftConfig[];
   overtime: OvertimeConfig;
   offDayWork: OffDayWorkConfig;
   leaves: LeaveQuotaConfig;
@@ -79,5 +113,6 @@ export interface HRMSPolicySettings {
   holidays: CompanyHoliday[];
   scheduler: SyncSchedulerConfig;
   ess: EssConfig;
+  statutory: StatutoryConfig;
   updatedAt: string;
 }

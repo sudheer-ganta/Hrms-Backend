@@ -12,8 +12,12 @@ export interface AuthRequest extends Request {
 /** Valid, non-revoked token of an ACTIVE user (checked against the database on every request). */
 export const requireAuth = handle(async (req: AuthRequest, _res: Response, next: NextFunction) => {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) throw ApiError.unauthenticated('Missing or invalid token.');
-  const user = await authService.authenticateToken(header.slice(7).trim());
+  const token = (header && header.startsWith('Bearer '))
+    ? header.slice(7).trim()
+    : (typeof req.query.token === 'string' ? req.query.token.trim() : null);
+
+  if (!token) throw ApiError.unauthenticated('Missing or invalid token.');
+  const user = await authService.authenticateToken(token);
   if (!user) throw ApiError.unauthenticated('Invalid, expired or revoked token.');
   req.user = user;
   next();

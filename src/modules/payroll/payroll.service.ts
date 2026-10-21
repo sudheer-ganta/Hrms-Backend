@@ -1,7 +1,7 @@
 import { employeeMasterService } from '../employees/employeeMaster.service.js';
 import { computeSalaryBreakdown, SalaryInputs } from '../employees/salary.js';
 import { EmployeeProfile } from '../employees/employeeMaster.types.js';
-import { policyService } from '../settings/policy.service.js';
+import { policyService, pfPolicy, pctToRate, pfSalaryTerms } from '../settings/policy.service.js';
 import { HRMSPolicySettings } from '../settings/policy.types.js';
 import { attendanceDayService } from '../attendance/attendanceDay.service.js';
 import { ResolvedDay } from '../attendance/attendanceResolver.js';
@@ -11,19 +11,21 @@ import { payrollRunService } from './payrollRun.service.js';
 import { payrollAdjustmentService } from './payrollAdjustment.service.js';
 import { EmployeeOtAdjustment } from './payrollAdjustment.types.js';
 import { PAYROLL_RULES as R } from './payroll.config.js';
+import { pfWagesForMonth } from './pfRule.js';
 import { salaryAsOf } from '../employees/salaryRevisions.js';
+import { employedDuring, outsideEmployment } from '../employees/employment.js';
 import { ApiError } from '../../utils/apiError.js';
 import { normalizeEmpCode } from '../../utils/empCode.js';
 import { istMonth, istToday, isValidBusinessMonth } from '../../utils/istTime.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Stored profile → salary inputs. Zero/blank values for basic/HRA/gross mean "not set" (as before). */
+/** Stored profile → salary inputs. Zero/blank values for basic/gross mean "not set" (as before); HRA 0 is a real zero. */
 export const profileSalaryInputs = (p: EmployeeProfile): SalaryInputs => ({
   monthlyCtc: p.monthlyCtc,
   basicSalary: p.basicSalary || undefined,
   da: p.da,
-  hra: p.hra || undefined,
+  hra: p.hra ?? undefined, // an explicit 0 is honored (no HRA in the salary); blank = derive from CTC
   specialAllowance: p.specialAllowance,
   otherAllowance: p.otherAllowance,
   employeePf: p.employeePf,
@@ -52,21 +54,26 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
   const profile = salaryAsOf(currentProfile, month);
   const monthDays = days.length;
   let presentDays = 0, halfDays = 0, absentDays = 0, leaveDays = 0, unpaidLeaveDays = 0, weeklyOffs = 0, holidayCount = 0;
-  let missedPunchDays = 0, wfhDays = 0, onDutyDays = 0, elapsedDays = 0, lateArrivals = 0;
+  let missedPunchDays = 0, wfhDays = 0, onDutyDays = 0, elapsedDays = 0, lateArrivals = 0, notEmployedDays = 0;
   let workMinutes = 0, otMinutes = 0, weeklyOffWorkAuto = 0, holidayWorkAuto = 0;
 
   for (const d of days) {
     if (d.isFuture || !d.status) continue;
     elapsedDays++;
+    // Before joining / after the last working day the person was not employed: not an absence, not paid, not loss of pay.
+    if (outsideEmployment(profile, d.businessDate)) { notEmployedDays++; continue; }
     switch (d.status) {
       case 'PRESENT': presentDays++; break;
       case 'WORK_FROM_HOME': presentDays++; wfhDays++; break;
       case 'ON_DUTY': presentDays++; onDutyDays++; break;
       case 'MISSED_PUNCH': presentDays++; missedPunchDays++; break;
-      case 'HALF_DAY': halfDays++; break;
+      // An approved paid half-day leave (the resolver sets leaveFraction 0.5) is leave, not a shortfall: the leave
+      // balance already pays for that half, so it must not also cost loss of pay.
+      case 'HALF_DAY': if (d.leaveFraction > 0) leaveDays += d.leaveFraction; else halfDays++; break;
       case 'ABSENT': absentDays++; break;
       case 'LEAVE_PAID': leaveDays++; break;
-      case 'LEAVE_UNPAID': unpaidLeaveDays++; break;
+      // An unpaid half-day leave loses half a day of pay, not the whole day.
+      case 'LEAVE_UNPAID': unpaidLeaveDays += d.leaveFraction > 0 ? d.leaveFraction : 1; break;
       case 'WEEKLY_OFF': weeklyOffs++; break;
       case 'HOLIDAY': holidayCount++; break;
     }
@@ -76,22 +83,19 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
     if (d.isLate && (d.status === 'PRESENT' || d.status === 'HALF_DAY' || d.status === 'MISSED_PUNCH')) lateArrivals++;
   }
 
-  let totalWorkHours = workMinutes / 60;
-  const autoOt = policy.overtime?.enabled !== false && policy.overtime?.recognition === 'AUTOMATIC';
-  let totalOtHours = adjustment?.otHours !== undefined && adjustment.otHours >= 0
+  const totalWorkHours = workMinutes / 60;
+  // Overtime hours come from the punches (time inside each shift's OT windows), unless HR typed an explicit figure.
+  const totalOtHours = adjustment?.otHours !== undefined && adjustment.otHours >= 0
     ? adjustment.otHours
-    : autoOt
+    : policy.overtime?.enabled !== false
     ? otMinutes / 60
     : 0;
-  if (adjustment?.totalWorkHours !== undefined && adjustment.totalWorkHours >= 0) {
-    totalWorkHours = adjustment.totalWorkHours;
-  }
 
   const lopDays = absentDays + unpaidLeaveDays + halfDays * R.halfDayLopFraction;
-  const payableDays = Math.max(0, elapsedDays - lopDays);
+  const payableDays = Math.max(0, elapsedDays - notEmployedDays - lopDays);
 
   // ---- salary structure: ONE formula (employees/salary.ts) ----
-  const sal = computeSalaryBreakdown(profileSalaryInputs(profile));
+  const sal = computeSalaryBreakdown(profileSalaryInputs(profile), pfSalaryTerms(policy, `${month}-31`));
   const hasSalary = !!sal;
   const monthlyCtc = sal?.monthlyCtc ?? 0;
   const basic = sal?.basicSalary ?? 0;
@@ -100,11 +104,6 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
   const special = sal?.specialAllowance ?? 0;
   const other = sal?.otherAllowance ?? 0;
   const gross = sal?.grossSalary ?? 0;
-  const pf = sal?.employeePf ?? 0;
-  const esi = sal?.employeeEsic ?? 0;
-  const pt = sal?.professionalTax ?? 0;
-  const erPf = sal?.employerPf ?? 0;
-  const erEsic = sal?.employerEsic ?? 0;
 
   // ---- overtime & Sunday work ----
   const otWageBase = basic + da;
@@ -112,13 +111,10 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
   const hourlyWage = hasSalary ? otWageBase / R.otWageDivisorDays / hoursPerDay : 0;
 
   const profMult = profile.otMultiplier && profile.otMultiplier > 0 ? profile.otMultiplier : undefined;
-  const legacyRate = profile.otRatePerHour && profile.otRatePerHour > 0 ? profile.otRatePerHour : undefined;
-  const legacyAsMultiplier = !profMult && legacyRate !== undefined && legacyRate <= R.legacyOtMultiplierMax ? legacyRate : undefined;
-  const absoluteRate = legacyRate !== undefined && (profMult !== undefined || legacyRate > R.legacyOtMultiplierMax) ? legacyRate : undefined;
-
+  // One OT rate: hourly wage x multiplier (this month's HR override, else the employee's, else the company default).
   const adjMult = adjustment?.multiplier !== undefined && adjustment.multiplier > 0 ? adjustment.multiplier : undefined;
-  const effectiveMultiplier = adjMult ?? profMult ?? legacyAsMultiplier ?? R.defaultOtMultiplier;
-  const exactOtRate = absoluteRate !== undefined && adjustment?.multiplier === undefined ? absoluteRate : hourlyWage * effectiveMultiplier;
+  const effectiveMultiplier = adjMult ?? profMult ?? R.defaultOtMultiplier;
+  const exactOtRate = hourlyWage * effectiveMultiplier;
 
   const otEligible = profile.otEligible !== false;
   const otEarnings = otEligible && hasSalary ? r2(totalOtHours * exactOtRate) : 0;
@@ -136,10 +132,48 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
   // ---- pay ----
   const dailyWage = hasSalary ? gross / monthDays : 0;
   const lopDeduction = Math.round(lopDays * dailyWage);
+  const accruedEarnings = hasSalary ? Math.round(dailyWage * elapsedDays) : 0; // every elapsed calendar day
+  const elapsedEarnings = hasSalary ? Math.round(dailyWage * (elapsedDays - notEmployedDays)) : 0; // employed days only
+  const notEmployedAmount = accruedEarnings - elapsedEarnings;
+
+  // ---- statutory deductions: the company's statement method (payroll.config.ts, 2026.10-4) ----
+  // Earned fixed pay = the salary for the payable days only; PF / ESI wages leave out HRA, OT and weekly-off/holiday pay.
+  const earnedFixed = dailyWage * payableDays;
+  const nonHraFixed = Math.max(0, gross - hra);
+  const earnedNonHra = monthDays > 0 ? (nonHraFixed / monthDays) * payableDays : 0;
+  // PF wages follow the ceiling in force on each day of the month (15,000, then 25,000 from 17 Sep 2026): pfRule.ts.
+  // The PF rates and ceilings are the policy's (Settings → PF), so a change in the law is an edit, not a deploy.
+  const pfRules = pfPolicy(policy);
+  const pfCalc = pfWagesForMonth(month, monthDays, hasSalary ? Math.round(earnedNonHra) : 0, pfRules.ceilings);
+  const pfWages = pfCalc.wages;
+  const pf = Math.round(pfWages * pctToRate(pfRules.employeeRatePct));
+  const erPf = pf; // the employer pays the same share as the employee
+  const erEps = Math.min(erPf, Math.round(pfWages * pctToRate(pfRules.epsRatePct)));
+  const erEpf = erPf - erEps;
+  // Admin charge and EDLI are a % of the PF wages, worked out from the rounded PF (pf / PF rate = the wages).
+  const erPfAdmin = Math.round((pf * pfRules.adminRatePct) / pfRules.employeeRatePct);
+  const erEdli = Math.round((pf * pfRules.edliRatePct) / pfRules.employeeRatePct);
+  const esiEligible = hasSalary && nonHraFixed <= R.esiWageCeiling;
+  const esiWages = esiEligible ? r2(earnedNonHra) : 0;
+  const esi = esiEligible ? Math.ceil(r2(esiWages * R.esiEmployeeRate)) : 0; // rounded UP, as the statement does
+  const erEsic = esiEligible ? Math.round(esiWages * R.esiEmployerRate) : 0;
+  // PT is worked out on the earned gross including OT and weekly-off / holiday pay.
+  const earnedGross = Math.round(earnedFixed + otEarnings + offDayWorkEarnings);
+  const pt = hasSalary && earnedGross >= R.ptGrossThreshold ? R.ptMonthly : 0;
   const ptInDeductions = R.ptDeductedFromNet ? pt : 0;
-  const totalDeductions = lopDeduction + pf + esi + ptInDeductions;
-  const elapsedEarnings = hasSalary ? Math.round(dailyWage * elapsedDays) : 0;
-  const exactNet = hasSalary ? elapsedEarnings - totalDeductions + otEarnings + offDayWorkEarnings : 0;
+
+  // ---- pay items HR types each month (OT Calculator) ----
+  const item = (v: number | undefined) => (v !== undefined && v > 0 ? r2(v) : 0);
+  const salaryAdvance = hasSalary ? item(adjustment?.salaryAdvance) : 0;
+  const otherDeduction = hasSalary ? item(adjustment?.otherDeduction) : 0;
+  const lwfDeduction = hasSalary ? item(adjustment?.lwf) : 0;
+  const attendanceBonus = hasSalary ? item(adjustment?.attendanceBonus) : 0;
+  const incrementAmount = hasSalary ? item(adjustment?.increment) : 0;
+
+  const totalDeductions = lopDeduction + pf + esi + ptInDeductions + salaryAdvance + otherDeduction + lwfDeduction;
+  const statementDeductions = pf + esi + ptInDeductions + salaryAdvance + otherDeduction + lwfDeduction;
+  // Net pay = (earned gross rounded) - deductions, plus the bonus / reimbursement items; never below zero.
+  const exactNet = hasSalary ? earnedGross - statementDeductions + attendanceBonus + incrementAmount : 0;
   const netPayable = hasSalary ? Math.max(0, Math.round(exactNet)) : 0;
   const grossEarnings = Math.round(elapsedEarnings + otEarnings + offDayWorkEarnings);
 
@@ -159,12 +193,23 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
     if (otEarnings > 0) earnings.push({ code: 'OT', label: 'Overtime', amount: otEarnings, note: `${r2(totalOtHours)}h @ ₹${r2(exactOtRate)}/h` });
     if (weeklyOffWorkEarnings > 0) earnings.push({ code: 'WEEKLY_OFF_WORK', label: 'Weekly-off Working', amount: weeklyOffWorkEarnings, note: `${weeklyOffWorkDays} day(s) @ ${R.weeklyOffWorkMultiplier}x` });
     if (holidayWorkEarnings > 0) earnings.push({ code: 'HOLIDAY_WORK', label: 'Paid-holiday Working', amount: holidayWorkEarnings, note: `${holidayWorkDays} day(s) @ ${R.holidayWorkMultiplier}x` });
-    const notAccrued = gross - elapsedEarnings;
+    if (attendanceBonus > 0) earnings.push({ code: 'ATTN_BONUS', label: 'Other / Attendance Bonus', amount: attendanceBonus });
+    if (incrementAmount > 0) earnings.push({ code: 'INCREMENT', label: 'Increments / Reimbursements', amount: incrementAmount });
+    const notAccrued = gross - accruedEarnings;
     if (Math.abs(notAccrued) >= 0.005) deductions.push({ code: 'NOT_ACCRUED', label: 'Days not yet accrued', amount: r2(notAccrued), note: `${monthDays - elapsedDays} day(s)` });
+    if (notEmployedAmount > 0) deductions.push({ code: 'NOT_EMPLOYED', label: 'Days outside employment', amount: notEmployedAmount, note: `${notEmployedDays} day(s)` });
     if (lopDeduction > 0) deductions.push({ code: 'LOP', label: 'Loss of Pay', amount: lopDeduction, note: `${r2(lopDays)} day(s)` });
-    if (pf > 0) deductions.push({ code: 'PF', label: 'Employee PF', amount: pf });
-    if (esi > 0) deductions.push({ code: 'ESI', label: 'Employee ESIC', amount: esi });
-    if (ptInDeductions > 0) deductions.push({ code: 'PT', label: 'Professional Tax', amount: ptInDeductions });
+    // Each statutory line says what it was worked out on, so the employee can see why it was cut.
+    const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+    const pfNote = pfCalc.segments.length > 1
+      ? `${pfRules.employeeRatePct}% of ${inr(pfWages)} PF wages (${pfCalc.segments.map((s) => `${inr(s.ceiling)} ceiling for ${s.days} day(s)`).join(' + ')})`
+      : `${pfRules.employeeRatePct}% of ${inr(pfWages)} PF wages`;
+    if (pf > 0) deductions.push({ code: 'PF', label: 'Employee PF', amount: pf, note: pfNote });
+    if (esi > 0) deductions.push({ code: 'ESI', label: 'Employee ESIC', amount: esi, note: `0.75% of ${inr(esiWages)} wages, rounded up` });
+    if (ptInDeductions > 0) deductions.push({ code: 'PT', label: 'Professional Tax', amount: ptInDeductions, note: `earned gross ${inr(earnedGross)} is ${inr(R.ptGrossThreshold)} or more` });
+    if (salaryAdvance > 0) deductions.push({ code: 'ADVANCE', label: 'Salary Advance', amount: salaryAdvance });
+    if (otherDeduction > 0) deductions.push({ code: 'OTHER_DEDUCTION', label: 'Other Deduction', amount: otherDeduction });
+    if (lwfDeduction > 0) deductions.push({ code: 'LWF', label: 'Labour Welfare Fund', amount: lwfDeduction });
   }
   const sum = (ls: PayslipLine[]) => r2(ls.reduce((a, l) => a + l.amount, 0));
   let totalEarnings = sum(earnings);
@@ -177,6 +222,8 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
   const employerBorne: PayslipLine[] = [];
   if (hasSalary) {
     employerBorne.push({ code: 'ER_PF', label: 'Employer PF', amount: erPf });
+    if (erPfAdmin > 0) employerBorne.push({ code: 'ER_PF_ADMIN', label: 'Employer PF Admin Charge', amount: erPfAdmin });
+    if (erEdli > 0) employerBorne.push({ code: 'ER_EDLI', label: 'Employer EDLI', amount: erEdli });
     if (erEsic > 0) employerBorne.push({ code: 'ER_ESIC', label: 'Employer ESIC', amount: erEsic });
     if (!R.ptDeductedFromNet && pt > 0) employerBorne.push({ code: 'PT', label: 'Professional Tax (included in CTC, not deducted)', amount: pt });
   }
@@ -209,10 +256,12 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
     onDutyDays,
     lopDays,
     payableDays,
+    notEmployedDays,
     weeklyOffs,
     holidays: holidayCount,
     totalWorkHours: Number(totalWorkHours.toFixed(1)),
     totalOtHours: Number(totalOtHours.toFixed(1)),
+    otMinutes: Math.round(totalOtHours * 60), // the exact overtime counted (after any HR override), shown as hours and minutes
     lateArrivals,
     monthlyCtc,
     basicSalary: basic,
@@ -239,6 +288,24 @@ export function computeEmployeePayroll({ profile: currentProfile, month, days, p
     grossEarnings,
     employerPf: erPf,
     employerEsic: erEsic,
+    employerPfAdmin: erPfAdmin,
+    employerEdli: erEdli,
+    employerEps: erEps,
+    employerEpf: erEpf,
+    pfSegments: pfCalc.segments,
+    pfWages,
+    esiWages,
+    salaryStructure: sal
+      ? {
+          employeePf: sal.employeePf, employerPf: sal.employerPf, employeeEsic: sal.employeeEsic,
+          employerEsic: sal.employerEsic, professionalTax: sal.professionalTax, minimumBonus: sal.minimumBonus,
+        }
+      : undefined,
+    attendanceBonus,
+    incrementAmount,
+    salaryAdvance,
+    otherDeduction,
+    lwfDeduction,
     lopDeduction,
     pfDeduction: pf,
     esiDeduction: esi,
@@ -332,7 +399,7 @@ class PayrollService {
     const adjustments = this.normalizeAdjustments(rawAdj);
     const resolved = await attendanceDayService.resolveMonth(profiles.map((p) => p.empCode), month, policy, istToday());
 
-    return profiles.map((profile) =>
+    return profiles.filter((profile) => employedDuring(profile, month)).map((profile) =>
       computeEmployeePayroll({
         profile,
         month,

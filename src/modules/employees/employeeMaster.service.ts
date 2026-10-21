@@ -10,7 +10,8 @@ import { isValidBusinessDate, isValidBusinessMonth } from '../../utils/istTime.j
 import { requireDb } from '../../config/db.js';
 import { requireObject, optionalNumber } from '../../utils/validate.js';
 import { payrollRunService } from '../payroll/payrollRun.service.js';
-import { istMonth } from '../../utils/istTime.js';
+import { istMonth, istToday } from '../../utils/istTime.js';
+import { policyService, pfSalaryTerms } from '../settings/policy.service.js';
 import { FROM_THE_BEGINNING, SALARY_STORED_FIELDS, SalaryValues, isRevisionMonth, latestValues, pickSalary, salaryAsOf, withRevision } from './salaryRevisions.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -65,7 +66,7 @@ export async function validateProfileInput(input: unknown): Promise<Record<strin
 
   for (const [k, v] of Object.entries(body)) {
     if (!ALLOWED.has(k) || v === undefined) continue;
-    if ((SALARY_FIELDS as readonly string[]).includes(k) || k === 'otMultiplier' || k === 'otRatePerHour') {
+    if ((SALARY_FIELDS as readonly string[]).includes(k) || k === 'otMultiplier') {
       if (v === null || v === '') { out[k] = null; continue; }
       const num = optionalNumber(v, k, { min: 0, max: 100_000_000 });
       out[k] = num;
@@ -88,7 +89,7 @@ export async function validateProfileInput(input: unknown): Promise<Record<strin
       else out[k] = v === '' ? undefined : v;
       continue;
     }
-    if (k === 'dob' || k === 'doj') {
+    if (k === 'dob' || k === 'doj' || k === 'lastWorkingDay') {
       if (v === '' || v === null) out[k] = undefined;
       else if (!isValidBusinessDate(v)) fail(k, 'Must be YYYY-MM-DD');
       else out[k] = v;
@@ -145,6 +146,17 @@ class EmployeeMasterService {
     return p;
   }
 
+  /**
+   * What attendance needs to know about each employee: their shift (blank = the default shift) and whether
+   * overtime is switched on for them. One cheap query; "ALL" reads everyone.
+   */
+  public async getDayRules(codes: string[] | 'ALL'): Promise<Map<string, { shiftName?: string; otEligible: boolean }>> {
+    requireDb();
+    const q: any = codes === 'ALL' ? {} : { empCode: { $in: codes.map(normalizeEmpCode) } };
+    const docs = (await EmployeeModel.find(q, { empCode: 1, shiftName: 1, otEligible: 1 }).lean()) as any[];
+    return new Map(docs.map((d) => [d.empCode as string, { shiftName: d.shiftName ? String(d.shiftName) : undefined, otEligible: d.otEligible !== false }]));
+  }
+
   public async getAllProfiles(): Promise<EmployeeProfile[]> {
     requireDb();
     const docs = await EmployeeModel.find({}).sort({ empCode: 1 }).lean();
@@ -171,7 +183,7 @@ class EmployeeMasterService {
     const parsed = await validateProfileInput(
       Object.fromEntries(Object.entries(body).filter(([k]) => (SALARY_FIELDS as readonly string[]).includes(k)))
     );
-    const breakdown = computeSalaryBreakdown(parsed as any);
+    const breakdown = computeSalaryBreakdown(parsed as any, pfSalaryTerms(policyService.getSettings(), istToday()));
     if (!breakdown) throw ApiError.rule('Monthly CTC must be greater than zero to compute a salary breakdown.');
     return breakdown;
   }
@@ -185,7 +197,7 @@ class EmployeeMasterService {
     const { empCode: _ignored, ...rest } = body;
     const { [SALARY_EFFECTIVE_FIELD]: _eff, ...fields } = await validateProfileInput(rest); // a new profile's salary applies from the start
     if (!fields.name) throw ApiError.validation('Employee name is required.', [{ field: 'name', issue: 'Required' }]);
-    const salary = computeSalaryBreakdown(fields as any);
+    const salary = computeSalaryBreakdown(fields as any, pfSalaryTerms(policyService.getSettings(), istToday()));
     const doc = await EmployeeModel.create({
       ...fields,
       ...(salary ? salary : {}),
@@ -210,6 +222,12 @@ class EmployeeMasterService {
     if (!existing) throw ApiError.notFound(`Employee ${code} not found.`);
     const { [SALARY_EFFECTIVE_FIELD]: effectiveInput, ...fields } = await validateProfileInput(input);
 
+    const doj = ('doj' in fields ? fields.doj : toProfile(existing).doj) as string | undefined;
+    const lwd = ('lastWorkingDay' in fields ? fields.lastWorkingDay : (existing as any).lastWorkingDay) as string | undefined;
+    if (doj && lwd && lwd < doj) {
+      throw ApiError.validation('Last working day cannot be before the date of joining.', [{ field: 'lastWorkingDay', issue: 'Before date of joining' }]);
+    }
+
     const $set: Record<string, unknown> = {};
     const $unset: Record<string, ''> = {};
     for (const [k, v] of Object.entries(fields)) {
@@ -232,7 +250,8 @@ class EmployeeMasterService {
       if ('monthlyCtc' in fields) {
         for (const k of SALARY_FIELDS) if (k !== 'monthlyCtc' && !(k in fields)) merged[k] = undefined;
       }
-      const breakdown = computeSalaryBreakdown(merged as any);
+      // Employer PF is sized by the PF ceiling in force in the month this salary starts (its last day, so a month the ceiling changes in gets the new one).
+      const breakdown = computeSalaryBreakdown(merged as any, pfSalaryTerms(policyService.getSettings(), `${requested}-31`));
       const values: SalaryValues = breakdown ? pickSalary(breakdown) : {};
       const { revisions, effectiveFrom } = withRevision(profile, values, requested, changedBy, new Date().toISOString());
       if (effectiveFrom !== FROM_THE_BEGINNING) await payrollRunService.assertMonthOpen(effectiveFrom, 'This salary change');

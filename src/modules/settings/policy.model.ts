@@ -19,8 +19,21 @@ const PolicySchema = new Schema<PolicyDocument>(
       halfDayThresholdMinutes: { type: Number, default: 180 },
       fullDayThresholdMinutes: { type: Number, default: 360 },
       minCheckoutForFullDay: { type: String, default: '16:00' },
-      breakDurationMinutes: { type: Number, default: 60 },
+      otWindows: [{ _id: false, start: { type: String, required: true }, end: { type: String, required: true } }],
     },
+    shifts: [
+      {
+        _id: false,
+        shiftName: { type: String, required: true },
+        startTime: { type: String, required: true },
+        endTime: { type: String, required: true },
+        gracePeriodMinutes: { type: Number, default: 60 },
+        halfDayThresholdMinutes: { type: Number, default: 180 },
+        fullDayThresholdMinutes: { type: Number, default: 360 },
+        minCheckoutForFullDay: { type: String },
+        otWindows: [{ _id: false, start: { type: String, required: true }, end: { type: String, required: true } }],
+      },
+    ],
     overtime: {
       enabled: { type: Boolean, default: true },
       hoursPerDay: { type: Number, default: 8 },
@@ -52,6 +65,15 @@ const PolicySchema = new Schema<PolicyDocument>(
     },
     ess: {
       geofenceMode: { type: String, enum: ['ENFORCE', 'OFF'], default: 'ENFORCE' },
+    },
+    statutory: {
+      pf: {
+        employeeRatePct: { type: Number, default: 12 },
+        epsRatePct: { type: Number, default: 8.33 },
+        adminRatePct: { type: Number, default: 0.5 },
+        edliRatePct: { type: Number, default: 0.5 },
+        ceilings: [{ _id: false, from: { type: String, required: true }, ceiling: { type: Number, required: true } }],
+      },
     },
     updatedAt: { type: String },
   },

@@ -79,7 +79,6 @@ class AttendanceDayService {
       workMinutes,
       punchCount: punches.length,
       vendorStatus: vendor ? String(vendor.status) : null,
-      vendorOvertimeMinutes: vendor ? parseWorkTimeToMinutes(vendor.overTime) : null,
       vendorLateMinutes: vendor ? parseWorkTimeToMinutes(vendor.lateIn) : null,
       siteId,
       sourceIds: Array.from(sourceIds),
@@ -109,7 +108,7 @@ class AttendanceDayService {
       unique.set(keyOf(nk), nk);
     }
     const all = Array.from(unique.values());
-    const CHUNK = 100;
+    const CHUNK = 500;
     for (let i = 0; i < all.length; i += CHUNK) {
       const chunk = all.slice(i, i + CHUNK);
       const codes = Array.from(new Set(chunk.map((k) => k.employeeCode)));
@@ -154,7 +153,6 @@ class AttendanceDayService {
       punchCount: doc.punchCount,
       workMinutes: doc.workMinutes,
       vendorStatus: doc.vendorStatus,
-      vendorOvertimeMinutes: doc.vendorOvertimeMinutes,
       vendorLateMinutes: doc.vendorLateMinutes,
       adjustments: adj,
     };
@@ -239,6 +237,7 @@ class AttendanceDayService {
       filter.includeInactive || filter.employeeCode ? Promise.resolve(new Set<string>()) : employeeMasterService.getInactiveCodes(),
     ]);
     const nameOf = new Map(profiles.map((p) => [p.empCode, p.name]));
+    const rulesOf = new Map(profiles.map((p) => [p.empCode, { shiftName: p.shiftName, otEligible: p.otEligible !== false }]));
     const adjustments = await this.loadAdjustments(docs);
     const needle = filter.search?.trim().toLowerCase();
 
@@ -247,7 +246,7 @@ class AttendanceDayService {
       if (inactive.has(d.employeeCode)) continue;
       const name = nameOf.get(d.employeeCode) || d.employeeName || `Employee ${d.employeeCode}`;
       if (needle && !d.employeeCode.toLowerCase().includes(needle) && !name.toLowerCase().includes(needle)) continue;
-      const resolved = resolveDay(d.businessDate, this.toFacts(d, adjustments), { policy, today });
+      const resolved = resolveDay(d.businessDate, this.toFacts(d, adjustments), { policy, today, ...rulesOf.get(d.employeeCode) });
       out.push(this.toDto(d.employeeCode, name, d.businessDate, resolved, d, siteNames));
     }
     out.sort((a, b) => (a.businessDate === b.businessDate ? a.employeeCode.localeCompare(b.employeeCode) : b.businessDate.localeCompare(a.businessDate)));
@@ -259,7 +258,12 @@ class AttendanceDayService {
       totalRecords: rows.length, presentCount: 0, halfDayCount: 0, absentCount: 0, leaveCount: 0, offCount: 0,
       missedPunchCount: 0, totalWorkMinutes: 0, avgWorkMinutes: 0, totalOvertimeMinutes: 0, lateArrivalsCount: 0,
     };
+    // The average covers only days that were worked AND have measured hours: a single-swipe day has none, and an absent
+    // day's stray punches are not a working day, so neither may pull the average (or sit in only one half of the division).
+    let measuredDays = 0;
+    let measuredMinutes = 0;
     for (const r of rows) {
+      if ((isPresentLike(r.status) || r.status === 'HALF_DAY') && r.workMinutes > 0) { measuredDays++; measuredMinutes += r.workMinutes; }
       if (isPresentLike(r.status)) s.presentCount++;
       if (r.status === 'HALF_DAY') s.halfDayCount++;
       if (isLop(r.status)) s.absentCount++;
@@ -270,8 +274,7 @@ class AttendanceDayService {
       s.totalOvertimeMinutes += r.overtimeMinutes;
       if (r.isLate && (isPresentLike(r.status) || r.status === 'HALF_DAY')) s.lateArrivalsCount++;
     }
-    const worked = s.presentCount + s.halfDayCount;
-    s.avgWorkMinutes = worked ? Math.round(s.totalWorkMinutes / worked) : 0;
+    s.avgWorkMinutes = measuredDays ? Math.round(measuredMinutes / measuredDays) : 0;
     return s;
   }
 
@@ -306,12 +309,14 @@ class AttendanceDayService {
       docIndex.set(`${d.employeeCode}|${d.businessDate}`, d);
     }
     const codes = employeeCodes === 'ALL' ? Array.from(byEmp.keys()) : employeeCodes.map(normalizeEmpCode);
+    const rulesOf = await employeeMasterService.getDayRules(employeeCodes);
     const resolved = new Map<string, ResolvedDay[]>();
     for (const code of codes) {
       const mine = byEmp.get(code);
+      const rules = rulesOf.get(code);
       resolved.set(code, dates.map((date) => {
         const doc = mine?.get(date);
-        return resolveDay(date, doc ? this.toFacts(doc, adjustments) : undefined, { policy, today });
+        return resolveDay(date, doc ? this.toFacts(doc, adjustments) : undefined, { policy, today, shiftName: rules?.shiftName, otEligible: rules?.otEligible });
       }));
     }
     return { resolved, docs: docIndex };
@@ -369,7 +374,8 @@ class AttendanceDayService {
     const code = normalizeEmpCode(employeeCode);
     const doc = (await AttendanceDayModel.findOne({ employeeCode: code, businessDate }).lean()) as any;
     const adjustments = doc ? await this.loadAdjustments([doc]) : new Map<string, ActiveAdjustment>();
-    const day = resolveDay(businessDate, doc ? this.toFacts(doc, adjustments) : undefined, { policy: policyService.getSettings(), today: istToday() });
+    const rules = (await employeeMasterService.getDayRules([code])).get(code);
+    const day = resolveDay(businessDate, doc ? this.toFacts(doc, adjustments) : undefined, { policy: policyService.getSettings(), today: istToday(), shiftName: rules?.shiftName, otEligible: rules?.otEligible });
     return { day, doc };
   }
 

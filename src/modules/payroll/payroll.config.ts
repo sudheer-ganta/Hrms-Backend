@@ -8,15 +8,28 @@
  */
 export const PAYROLL_RULES = {
   /** Bump whenever any number below changes; stored in snapshots. */
-  version: '2026.10-3',
+  version: '2026.10-6',
 
   // --- Salary structure (Annexure K) ---
   basicShareOfCtc: 0.5,
   hraShareOfCtc: 0.2,
 
   // --- Provident Fund ---
+  // PAYROLL PF is NOT read from here any more: its rates and ceilings are edited in Settings (policy.statutory.pf) and
+  // payroll.service.ts reads them from the policy, and so does the CTC-to-gross derivation (employees/salary.ts gets the
+  // policy's rate and the ceiling in force). The values below are only the opening defaults of that policy, plus the
+  // fallback for a salary calculation that is handed no PF terms.
   pfRate: 0.12,
-  pfMonthlyCap: 1800, // PF is 12% of basic, capped at this monthly amount (employee and employer)
+  pfMonthlyCap: 1800, // the fallback cap (12% of a 15,000 ceiling) for a calculation given no PF terms
+  /**
+   * Opening defaults for the PF wage ceiling history. The Ministry of Labour notification S.O. 5109(E) raised it
+   * from 15,000 to 25,000 with effect from 17 Sep 2026, so that month is split: 1-16 Sep at 15,000 and 17-30 Sep at 25,000,
+   * each part prorated over the days of the month (see pfRule.ts). A future change is a new row in Settings, not here.
+   */
+  pfCeilings: [
+    { from: '1900-01-01', ceiling: 15000 },
+    { from: '2026-09-17', ceiling: 25000 },
+  ] as readonly { from: string; ceiling: number }[],
 
   // --- ESIC (statutory gross wage ceiling of ₹21,000/month; 0.75% employee, 3.25% employer) ---
   esiWageCeiling: 21000,
@@ -33,8 +46,11 @@ export const PAYROLL_RULES = {
    * (Gross = CTC - employer PF - employer ESIC - PT) and is NOT deducted again from
    * net pay. The payslip therefore shows it as "employer-borne", not as a deduction.
    * Set to true only if the company decides PT must also be deducted from the employee.
+   *
+   * 2026.10-4: the company's statement deducts PT from net pay, on the earned gross INCLUDING OT and weekly-off/holiday
+   * pay (>= ptGrossThreshold => ptMonthly). ESI wages exclude HRA, and ESI is rounded UP.
    */
-  ptDeductedFromNet: false,
+  ptDeductedFromNet: true,
 
   // --- Overtime / Off-day work ---
   otWageDivisorDays: 26,   // (Basic + DA) / 26 / hoursPerDay
@@ -42,8 +58,6 @@ export const PAYROLL_RULES = {
   // (Basic + DA) / 26 x multiplier x days worked. Two keys on purpose: the business may price them differently.
   weeklyOffWorkMultiplier: 2,
   holidayWorkMultiplier: 2,
-  /** Legacy: profile.otRatePerHour <= this value was interpreted as a MULTIPLIER. Superseded by profile.otMultiplier. */
-  legacyOtMultiplierMax: 10,
 
   // --- Loss of pay ---
   /**

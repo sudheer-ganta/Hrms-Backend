@@ -51,12 +51,12 @@ export class AuthService {
 
   public generateToken(user: UserDocument): string {
     const claims: TokenClaims = { id: String(user._id), tv: user.tokenVersion || 0 };
-    return jwt.sign(claims, ENV.JWT_SECRET, { expiresIn: ENV.JWT_EXPIRES_IN } as jwt.SignOptions);
+    return jwt.sign(claims, ENV.JWT_SECRET, { expiresIn: ENV.JWT_EXPIRES_IN, algorithm: 'HS256' } as jwt.SignOptions);
   }
 
   public verifyToken(token: string): TokenClaims | null {
     try {
-      const decoded = jwt.verify(token, ENV.JWT_SECRET) as any;
+      const decoded = jwt.verify(token, ENV.JWT_SECRET, { algorithms: ['HS256'] }) as any; // pinned: never trust the token's own alg header
       if (!decoded?.id) return null;
       return { id: String(decoded.id), tv: Number(decoded.tv ?? 0) };
     } catch {

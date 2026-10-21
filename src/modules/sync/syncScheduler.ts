@@ -5,6 +5,7 @@ import { policyService } from '../settings/policy.service.js';
 import { ENV } from '../../config/env.js';
 import { isDbConnected } from '../../config/db.js';
 import { addDays, istToday } from '../../utils/istTime.js';
+import { revisionService } from '../realtime/revision.service.js';
 
 export interface SchedulerStatus {
   isRunning: boolean;
@@ -172,6 +173,10 @@ export class SyncScheduler {
         errors: [...raw, ...inout].filter((r) => !r.success).map((r) => `${r.sourceId}/${r.syncType}: ${r.error}`),
         ...(backfill ? { backfill } : {}),
       };
+      const totalChanged = (this.lastRunResult.raw?.inserted || 0) + (this.lastRunResult.inOut?.upserted || 0);
+      if (totalChanged > 0 || ok) {
+        revisionService.bump('sync');
+      }
       return this.lastRunResult;
     } catch (e: any) {
       this.errorCount++;

@@ -5,6 +5,8 @@ import { isOffDay, isPresentLike, isLop } from './attendanceStatus.js';
 import { resolveDay } from './attendanceResolver.js';
 import { IAttendanceRecord, AttendanceQueryFilters, AttendancePaginationResult } from './attendance.types.js';
 import { employeeMasterService } from '../employees/employeeMaster.service.js';
+import { EmployeeProfile } from '../employees/employeeMaster.types.js';
+import { outsideEmployment } from '../employees/employment.js';
 import { policyService } from '../settings/policy.service.js';
 import { siteService } from '../sites/site.service.js';
 import { SyncLogModel } from '../sync/sync.model.js';
@@ -47,6 +49,13 @@ const HOUR_SLOTS = Array.from({ length: 16 }, (_, i) => {
 });
 
 const rate = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : null);
+
+/**
+ * Who the dashboard counts on `date`: active employees (at the chosen site) who were employed that day.
+ * Someone who joins on the 15th is not "absent" on the 10th, and someone who left on the 20th is not "absent" on the 25th.
+ */
+export const dashboardRoster = (profiles: EmployeeProfile[], date: string, siteId?: string): EmployeeProfile[] =>
+  profiles.filter((p) => p.status === 'active' && (!siteId || p.location === siteId) && !outsideEmployment(p, date));
 
 export class AttendanceService {
   /** Raw punch log (immutable facts), paginated. */
@@ -93,7 +102,7 @@ export class AttendanceService {
       siteService.getSites(),
       AttendanceDayModel.find({ businessDate: date }).lean(),
     ]);
-    const roster = profiles.filter((p) => p.status === 'active' && (!siteFilter || p.location === siteFilter));
+    const roster = dashboardRoster(profiles, date, siteFilter);
     const rosterCodes = new Set(roster.map((p) => p.empCode));
     const siteOfEmployee = new Map(profiles.map((p) => [p.empCode, p.location || '']));
 

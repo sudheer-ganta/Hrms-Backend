@@ -17,6 +17,7 @@ const EmployeeProfileSchema = new Schema<EmployeeProfileDocument>(
     location: { type: String, trim: true, lowercase: true }, // canonical siteId
     operationsCategory: { type: String, trim: true },
     doj: { type: String },
+    lastWorkingDay: { type: String },
     dob: { type: String },
     gender: { type: String },
     bloodGroup: { type: String },
@@ -59,7 +60,6 @@ const EmployeeProfileSchema = new Schema<EmployeeProfileDocument>(
 
     otEligible: { type: Boolean, default: true },
     otMultiplier: { type: Number },
-    otRatePerHour: { type: Number },
     status: { type: String, enum: ['active', 'inactive', 'resigned'], default: 'active' },
     notes: { type: String },
     updatedAt: { type: String },
