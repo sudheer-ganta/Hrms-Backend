@@ -8,6 +8,9 @@ const controller = new PolicyController();
 // AUTHENTICATED: everyone needs the policy to render calendars and thresholds
 router.get('/', ...access.AUTHENTICATED, controller.getSettings);
 
+// HR_OR_ABOVE: the rulebook (read-only; every number in it is generated from the live settings)
+router.get('/rules', ...access.HR_OR_ABOVE, controller.getRules);
+
 // FOUNDER_OR_SUPER_ADMIN: policy settings, shifts, grace periods, holidays (excludes HR)
 router.put('/', ...access.FOUNDER_OR_SUPER_ADMIN, controller.updateSettings);
 router.post('/holidays', ...access.FOUNDER_OR_SUPER_ADMIN, controller.addHoliday);

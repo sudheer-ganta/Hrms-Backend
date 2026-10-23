@@ -139,6 +139,10 @@ describe('policy propagation (real Express + MongoDB)', { skip: SKIP }, () => {
     // E001: works the Sunday, does NOT work the holiday.  E002: works the holiday, does NOT work the Sunday.
     await punch('E001', SUNDAY, '09:00', '17:30');
     await punch('E002', HOLIDAY, '09:00', '17:30');
+    // E001 also attended the two days before that Sunday. (After two absences in a row a worked weekly off is just a normal
+    // day: PAYROLL_RULES.weeklyOffWorkAfterAbsentDays, tested in weeklyOffAfterAbsence.test.ts.)
+    await punch('E001', addDays(SUNDAY, -2), '09:00', '17:30');
+    await punch('E001', addDays(SUNDAY, -1), '09:00', '17:30');
     const base1 = await payroll('E001');
     const base2 = await payroll('E002');
 

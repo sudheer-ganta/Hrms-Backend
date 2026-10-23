@@ -4,6 +4,7 @@ import {
 } from '../settings/policy.service.js';
 import { dayNameOf, hhmmToMinutes, durationMinutes } from '../../utils/istTime.js';
 import { AttendanceStatus, mapVendorStatus, STATUS_LABELS } from './attendanceStatus.js';
+import { PAYROLL_RULES } from '../payroll/payroll.config.js';
 
 /**
  * THE single authority that decides what a day is. Payroll, the dashboard, the timesheet,
@@ -68,6 +69,8 @@ export interface ResolvedDay {
   holidayName: string | null;
   /** Days of work recognized on this weekly off / paid holiday (policy.offDayWork.<kind>). 0 unless AUTOMATIC. The kind is the day's status. */
   offDayWorkFraction: number;
+  /** A weekly off that was worked right after consecutive absent days: counted as a normal working day, no weekly-off pay. */
+  offDayWorkAsNormalDay: boolean;
   /** Version of the policy this verdict was computed under. */
   policyVersion: number;
   vendorStatus: string | null;
@@ -130,6 +133,7 @@ export function resolveDay(businessDate: string, facts: DayFacts | undefined, ct
     isPaidHoliday: !!holiday && holiday.paid !== false,
     holidayName: holiday?.name ?? null,
     offDayWorkFraction: 0,
+    offDayWorkAsNormalDay: false,
     policyVersion: policy.version,
     vendorStatus: f.vendorStatus || null,
     source: 'NONE',
@@ -233,4 +237,23 @@ export function resolveDay(businessDate: string, facts: DayFacts | undefined, ct
   const verdict = classifyWork(measured, f.lastOut, policy);
   if (verdict === 'ABSENT') return done({ status: 'ABSENT', source: 'PUNCHES', workMinutes: measured });
   return worked(verdict, 'PUNCHES', measured);
+}
+
+
+/**
+ * Business rule (PAYROLL_RULES.weeklyOffWorkAfterAbsentDays): an employee who was absent for the N days in a row just before
+ * a weekly off, and then works that weekly off, gets no weekly-off working credit. The day stays a plain weekly off in
+ * the calendar and is flagged `offDayWorkAsNormalDay`, so payroll adds nothing on top of the salary for it.
+ *
+ * `days` must be consecutive calendar days in order and start at least N days before the first day that matters
+ * (callers add that lookback). Only ABSENT days count: leave, holidays, weekly offs and future days break the run.
+ * Returns a new array; the input is not modified.
+ */
+export function applyAbsenceBeforeWeeklyOff(days: ResolvedDay[], requiredAbsentDays: number = PAYROLL_RULES.weeklyOffWorkAfterAbsentDays): ResolvedDay[] {
+  if (requiredAbsentDays <= 0) return days;
+  return days.map((d, i) => {
+    if (d.status !== 'WEEKLY_OFF' || d.offDayWorkFraction <= 0 || i < requiredAbsentDays) return d;
+    for (let k = 1; k <= requiredAbsentDays; k++) if (days[i - k].status !== 'ABSENT') return d;
+    return { ...d, offDayWorkFraction: 0, offDayWorkAsNormalDay: true };
+  });
 }

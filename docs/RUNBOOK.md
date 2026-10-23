@@ -77,3 +77,22 @@ cd Hrms-Frontend- && npm test        # helpers + cross-repo contract
 ```
 Integration tests start a throw-away `mongod` (set `MONGOMS_SYSTEM_BINARY` if it cannot be downloaded) and never
 touch Atlas.
+
+## 6. Slow first request (Render cold starts)
+
+Symptom: after a quiet period the first screen takes 30-60 s, then everything is quick.
+Cause: a Render **free** web service sleeps after ~15 minutes without inbound requests. While asleep the API is
+not running at all, so the **sync scheduler does not run either** (punches are not pulled until someone wakes it).
+
+Fix, in order of preference:
+1. Render -> the service -> change the instance type to a paid one (Starter). It never sleeps.
+2. Stay on free and ping `https://<render-host>/api/health` every 5 minutes from an external monitor
+   (UptimeRobot, cron-job.org, a GitHub Actions schedule). `/api/health` needs no login, does no heavy work, and
+   answers 503 when MongoDB is unreachable, so the same monitor doubles as the uptime alert.
+   A free instance has ~750 h/month, enough for one service running all month.
+3. Region: the Render service and the Atlas cluster must be in the same region (ideally Singapore / Mumbai for
+   users in India). Every request makes at least one database round trip (the login check), so a cross-ocean
+   cluster adds ~200 ms to each call and several seconds to a page that makes sequential queries.
+
+Where time goes: each request logs `[HTTP] METHOD path status - Nms` in the Render logs. A slow `/api/health`
+points at the host; a slow business endpoint points at the database.

@@ -7,6 +7,7 @@ import { handle, ApiError } from '../../utils/apiError.js';
 import { monthOf } from '../../utils/istTime.js';
 import { requireObject } from '../../utils/validate.js';
 import { validateHolidayInput } from './policy.service.js';
+import { buildRules } from './rules.js';
 
 /** Derived values are computed here so no client ever re-implements the shift math. */
 const withDerived = (p: HRMSPolicySettings) => ({
@@ -20,6 +21,11 @@ const withDerived = (p: HRMSPolicySettings) => ({
 export class PolicyController {
   public getSettings = handle(async (_req: Request, res: Response) => {
     res.json({ success: true, data: withDerived(policyService.getSettings()) });
+  });
+
+  /** The company rulebook in plain sentences, generated from the live policy and payroll ruleset. */
+  public getRules = handle(async (_req: Request, res: Response) => {
+    res.json({ success: true, data: buildRules(policyService.getSettings()) });
   });
 
   /**

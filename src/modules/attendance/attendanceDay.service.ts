@@ -2,7 +2,8 @@ import { AttendanceModel } from './attendance.model.js';
 import { InOutModel } from './inOut.model.js';
 import { AttendanceDayModel } from './attendanceDay.model.js';
 import { AttendanceAdjustmentModel } from './attendanceAdjustment.model.js';
-import { resolveDay, ResolvedDay, DayFacts, ActiveAdjustment } from './attendanceResolver.js';
+import { resolveDay, applyAbsenceBeforeWeeklyOff, ResolvedDay, DayFacts, ActiveAdjustment } from './attendanceResolver.js';
+import { PAYROLL_RULES } from '../payroll/payroll.config.js';
 import { AttendanceOrigin, isLop, isOffDay, isPresentLike } from './attendanceStatus.js';
 import { AttendanceDayDTO, AttendanceSummary, TimesheetEmployee } from './attendanceDay.types.js';
 import { policyService, isOvernightShift } from '../settings/policy.service.js';
@@ -11,7 +12,7 @@ import { employeeMasterService } from '../employees/employeeMaster.service.js';
 import { HRMSPolicySettings } from '../settings/policy.types.js';
 import { requireDb } from '../../config/db.js';
 import { normalizeEmpCode } from '../../utils/empCode.js';
-import { daysInMonth, datesBetween, hhmmToMinutes, istTimeFromInstant, istToday } from '../../utils/istTime.js';
+import { addDays, daysInMonth, datesBetween, hhmmToMinutes, istTimeFromInstant, istToday } from '../../utils/istTime.js';
 import { parseWorkTimeToMinutes } from '../../utils/dateUtils.js';
 import { escapeRegex } from '../../utils/validate.js';
 
@@ -200,6 +201,7 @@ class AttendanceDayService {
       isPaidHoliday: r.isPaidHoliday,
       holidayName: r.holidayName,
       offDayWorkFraction: r.offDayWorkFraction,
+      offDayWorkAsNormalDay: r.offDayWorkAsNormalDay,
       policyVersion: r.policyVersion,
       vendorStatus: r.vendorStatus,
       origins: (doc?.origins || []) as AttendanceOrigin[],
@@ -241,16 +243,57 @@ class AttendanceDayService {
     const adjustments = await this.loadAdjustments(docs);
     const needle = filter.search?.trim().toLowerCase();
 
-    const out: AttendanceDayDTO[] = [];
+    const entries: Array<{ d: any; name: string; resolved: ResolvedDay }> = [];
     for (const d of docs as any[]) {
       if (inactive.has(d.employeeCode)) continue;
       const name = nameOf.get(d.employeeCode) || d.employeeName || `Employee ${d.employeeCode}`;
       if (needle && !d.employeeCode.toLowerCase().includes(needle) && !name.toLowerCase().includes(needle)) continue;
-      const resolved = resolveDay(d.businessDate, this.toFacts(d, adjustments), { policy, today, ...rulesOf.get(d.employeeCode) });
-      out.push(this.toDto(d.employeeCode, name, d.businessDate, resolved, d, siteNames));
+      entries.push({ d, name, resolved: resolveDay(d.businessDate, this.toFacts(d, adjustments), { policy, today, ...rulesOf.get(d.employeeCode) }) });
     }
+    await this.applyAbsenceRule(entries, docs as any[], adjustments, policy, today, rulesOf);
+    const out: AttendanceDayDTO[] = entries.map((e) => this.toDto(e.d.employeeCode, e.name, e.d.businessDate, e.resolved, e.d, siteNames));
     out.sort((a, b) => (a.businessDate === b.businessDate ? a.employeeCode.localeCompare(b.employeeCode) : b.businessDate.localeCompare(a.businessDate)));
     return out;
+  }
+
+  /**
+   * The "absent days before a weekly off" rule (see applyAbsenceBeforeWeeklyOff) for rows resolved one day at a time:
+   * a worked weekly off needs the days just before it, which may sit outside the listed range or have no stored row.
+   * Gives the same answer as the month view, so every screen agrees.
+   */
+  private async applyAbsenceRule(
+    entries: Array<{ d: any; resolved: ResolvedDay }>,
+    known: any[],
+    adjustments: Map<string, ActiveAdjustment>,
+    policy: HRMSPolicySettings,
+    today: string,
+    rulesOf: Map<string, { shiftName?: string | null; otEligible?: boolean }>
+  ): Promise<void> {
+    const need = PAYROLL_RULES.weeklyOffWorkAfterAbsentDays;
+    const candidates = need > 0 ? entries.filter((e) => e.resolved.status === 'WEEKLY_OFF' && e.resolved.offDayWorkFraction > 0) : [];
+    if (!candidates.length) return;
+
+    const have = new Map<string, any>(known.map((d) => [`${d.employeeCode}|${d.businessDate}`, d]));
+    const before = (date: string) => Array.from({ length: need }, (_, i) => addDays(date, -(need - i)));
+    const missing = candidates.filter((c) => before(c.d.businessDate).some((date) => !have.has(`${c.d.employeeCode}|${date}`)));
+    if (missing.length) {
+      const extra = (await AttendanceDayModel.find({
+        employeeCode: { $in: Array.from(new Set(missing.map((c) => c.d.employeeCode))) },
+        businessDate: { $in: Array.from(new Set(missing.flatMap((c) => before(c.d.businessDate)))) },
+      }).lean()) as any[];
+      for (const d of extra) have.set(`${d.employeeCode}|${d.businessDate}`, d);
+      (await this.loadAdjustments(extra)).forEach((v, k) => adjustments.set(k, v));
+    }
+
+    for (const c of candidates) {
+      const code = c.d.employeeCode as string;
+      const ctx = { policy, today, ...rulesOf.get(code) };
+      const run = before(c.d.businessDate).map((date) => {
+        const doc = have.get(`${code}|${date}`);
+        return resolveDay(date, doc ? this.toFacts(doc, adjustments) : undefined, ctx);
+      });
+      c.resolved = applyAbsenceBeforeWeeklyOff([...run, c.resolved])[need];
+    }
   }
 
   public summarize(rows: AttendanceDayDTO[]): AttendanceSummary {
@@ -296,8 +339,12 @@ class AttendanceDayService {
     employeeCodes: string[] | 'ALL', from: string, to: string, policy: HRMSPolicySettings = policyService.getSettings(), today: string = istToday()
   ): Promise<{ resolved: Map<string, ResolvedDay[]>; docs: Map<string, any> }> {
     requireDb();
-    const dates = datesBetween(from, to);
-    const q: any = { businessDate: { $gte: from, $lte: to } };
+    // A weekly off worked after absent days is judged by the days BEFORE it, which may fall in the previous month:
+    // read and resolve a few days of lookback, apply the rule, then hand back only the days asked for.
+    const lookback = Math.max(0, PAYROLL_RULES.weeklyOffWorkAfterAbsentDays);
+    const lookFrom = lookback ? addDays(from, -lookback) : from;
+    const dates = datesBetween(lookFrom, to);
+    const q: any = { businessDate: { $gte: lookFrom, $lte: to } };
     if (employeeCodes !== 'ALL') q.employeeCode = { $in: employeeCodes.map(normalizeEmpCode) };
     const docs = (await AttendanceDayModel.find(q).lean()) as any[];
     const adjustments = await this.loadAdjustments(docs);
@@ -314,10 +361,11 @@ class AttendanceDayService {
     for (const code of codes) {
       const mine = byEmp.get(code);
       const rules = rulesOf.get(code);
-      resolved.set(code, dates.map((date) => {
+      const days = dates.map((date) => {
         const doc = mine?.get(date);
         return resolveDay(date, doc ? this.toFacts(doc, adjustments) : undefined, { policy, today, shiftName: rules?.shiftName, otEligible: rules?.otEligible });
-      }));
+      });
+      resolved.set(code, applyAbsenceBeforeWeeklyOff(days).slice(dates.length - datesBetween(from, to).length));
     }
     return { resolved, docs: docIndex };
   }

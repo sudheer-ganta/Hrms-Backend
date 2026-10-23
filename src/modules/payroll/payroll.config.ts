@@ -8,7 +8,7 @@
  */
 export const PAYROLL_RULES = {
   /** Bump whenever any number below changes; stored in snapshots. */
-  version: '2026.10-6',
+  version: '2026.10-7',
 
   // --- Salary structure (Annexure K) ---
   basicShareOfCtc: 0.5,
@@ -58,6 +58,12 @@ export const PAYROLL_RULES = {
   // (Basic + DA) / 26 x multiplier x days worked. Two keys on purpose: the business may price them differently.
   weeklyOffWorkMultiplier: 2,
   holidayWorkMultiplier: 2,
+  /**
+   * 2026.10-7: someone absent for this many days in a row immediately before a weekly off, who then works that weekly off,
+   * is NOT paid the weekly-off working rate. The day is treated as a normal working day: nothing is added on top of the
+   * salary (the weekly off is already a paid day). 0 switches the rule off.
+   */
+  weeklyOffWorkAfterAbsentDays: 2,
 
   // --- Loss of pay ---
   /**

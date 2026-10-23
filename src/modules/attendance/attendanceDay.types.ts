@@ -21,6 +21,8 @@ export interface AttendanceDayDTO {
   isPaidHoliday: boolean;
   holidayName: string | null;
   offDayWorkFraction: number;
+  /** Weekly off worked right after consecutive absent days: counted as a normal day, no weekly-off pay. */
+  offDayWorkAsNormalDay: boolean;
   policyVersion: number;
   vendorStatus: string | null;
   origins: AttendanceOrigin[];
