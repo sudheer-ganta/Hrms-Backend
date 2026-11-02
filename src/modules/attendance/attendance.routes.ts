@@ -14,6 +14,7 @@ router.post('/punch', ...access.EMPLOYEE_SELF, AttendanceController.recordPunch)
 router.get('/raw-swipes', ...access.HR_OR_ABOVE, AttendanceController.getRawPunches);
 router.get('/timesheet', ...access.HR_OR_ABOVE, AttendanceController.getTimesheet);
 router.get('/stats', ...access.HR_OR_ABOVE, AttendanceController.getDashboardStats);
+router.get('/stats/employees', ...access.HR_OR_ABOVE, AttendanceController.getDashboardEmployees);
 router.post('/recompute', ...access.HR_OR_ABOVE, AttendanceController.recompute);
 router.post('/adjust', ...access.HR_OR_ABOVE, AttendanceController.adjustDay);
 router.post('/adjust/revoke', ...access.HR_OR_ABOVE, AttendanceController.revokeAdjustment);

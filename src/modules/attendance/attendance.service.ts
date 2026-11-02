@@ -79,7 +79,68 @@ const rate = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 1
 export const dashboardRoster = (profiles: EmployeeProfile[], date: string, siteId?: string): EmployeeProfile[] =>
   profiles.filter((p) => p.status === 'active' && (!siteId || p.location === siteId) && !outsideEmployment(p, date));
 
+/** Which employees a dashboard card lists: the card's own counting rule, so the list always matches the number. */
+export const DASHBOARD_LIST_CATEGORIES = ['all', 'present', 'absent', 'flags'] as const;
+export type DashboardListCategory = (typeof DASHBOARD_LIST_CATEGORIES)[number];
+
+export interface DashboardEmployeeRow {
+  employeeCode: string;
+  employeeName: string;
+  department: string | null;
+  designation: string | null;
+  siteId: string | null;
+  siteName: string | null;
+  status: string | null;
+  statusLabel: string;
+  firstIn: string | null;
+  lastOut: string | null;
+  workMinutes: number;
+  isLate: boolean;
+  lateMinutes: number;
+  /** Today with a single punch so far: simply checked in, not a missed punch. */
+  inProgress: boolean;
+}
+
 export class AttendanceService {
+  /**
+   * The employees behind one dashboard card on `date`: same roster, same resolver verdicts and same
+   * counting rules as getDashboardStats, so a card's number and its list never disagree.
+   */
+  public async getDashboardEmployees(dateParam: string | undefined, sourceIdParam: string | undefined, category: DashboardListCategory): Promise<{ selectedDate: string; category: DashboardListCategory; rows: DashboardEmployeeRow[] }> {
+    requireDb();
+    const today = istToday();
+    const date = dateParam && isValidBusinessDate(dateParam) ? dateParam : today;
+    const siteFilter = sourceIdParam && sourceIdParam !== 'all' ? sourceIdParam.trim().toLowerCase() : undefined;
+    const policy = policyService.getSettings();
+
+    const [profiles, sites] = await Promise.all([employeeMasterService.getAllProfiles(), siteService.getSites()]);
+    const siteNames = new Map(sites.map((s) => [s.siteId, s.displayName]));
+    const roster = dashboardRoster(profiles, date, siteFilter);
+    const resolved = await attendanceDayService.resolveMonth(roster.map((p) => p.empCode), date.slice(0, 7), policy, today);
+    const dayIndex = Number(date.slice(8, 10)) - 1;
+
+    const rows: DashboardEmployeeRow[] = [];
+    for (const p of roster) {
+      const r = resolved.get(p.empCode)?.[dayIndex];
+      if (!r) continue;
+      const worked = isPresentLike(r.status) || r.status === 'HALF_DAY';
+      const keep =
+        category === 'all' ? true
+        : category === 'present' ? isPresentLike(r.status)
+        : category === 'absent' ? isLop(r.status)
+        : (r.status === 'HALF_DAY') || (r.isLate && worked);
+      if (!keep) continue;
+      rows.push({
+        employeeCode: p.empCode, employeeName: p.name, department: p.department || null, designation: p.designation || null,
+        siteId: p.location || null, siteName: p.location ? siteNames.get(p.location) || p.location : null,
+        status: r.status, statusLabel: r.statusLabel, firstIn: r.firstIn, lastOut: r.lastOut, workMinutes: r.workMinutes,
+        isLate: r.isLate && worked, lateMinutes: r.isLate && worked ? r.lateMinutes : 0, inProgress: r.inProgress,
+      });
+    }
+    rows.sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.employeeCode.localeCompare(b.employeeCode));
+    return { selectedDate: date, category, rows };
+  }
+
   /** Raw punch log (immutable facts), paginated. */
   public async getRawPunches(f: AttendanceQueryFilters): Promise<AttendancePaginationResult> {
     requireDb();

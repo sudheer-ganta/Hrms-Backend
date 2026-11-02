@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth.middleware.js';
-import { attendanceService } from './attendance.service.js';
+import { attendanceService, DASHBOARD_LIST_CATEGORIES, DashboardListCategory } from './attendance.service.js';
 import { attendanceDayService } from './attendanceDay.service.js';
 import { AttendanceAdjustmentModel } from './attendanceAdjustment.model.js';
 import { punchService } from './punch.service.js';
@@ -82,6 +82,13 @@ export class AttendanceController {
   public getDashboardStats = handle(async (req: AuthRequest, res: Response) => {
     const date = optionalDate(req.query.date, 'date');
     res.json({ success: true, data: await attendanceService.getDashboardStats(date, asString(req.query.siteId ?? req.query.sourceId)) });
+  });
+
+  /** GET /attendance/stats/employees?date&siteId&category=all|present|absent|flags: the people behind a dashboard card. */
+  public getDashboardEmployees = handle(async (req: AuthRequest, res: Response) => {
+    const date = optionalDate(req.query.date, 'date');
+    const category = optionalEnum<DashboardListCategory>(req.query.category, DASHBOARD_LIST_CATEGORIES, 'category') ?? 'all';
+    res.json({ success: true, data: await attendanceService.getDashboardEmployees(date, asString(req.query.siteId ?? req.query.sourceId), category) });
   });
 
   public getTodayPunchStatus = handle(async (req: AuthRequest, res: Response) => {
